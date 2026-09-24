@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ウィンドウの一覧は全画面・通知シェードの判定だけに使う。ノードの中身は読まない。
+     ランチャーの画面切り替えのイベントは「最近使ったアプリ」を開いているかの判定だけに使う -->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeWindowsChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagRetrieveInteractiveWindows"
+    android:canRetrieveWindowContent="true"
+    android:notificationTimeout="80"
+    android:isAccessibilityTool="false"
+    android:summary="@string/accessibility_summary"
+    android:description="@string/accessibility_description" />

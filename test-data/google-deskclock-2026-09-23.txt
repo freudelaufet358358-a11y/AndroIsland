@@ -1,0 +1,170 @@
+    NotificationRecord(0x00ac85cb: pkg=com.google.android.deskclock user=UserHandle{0} id=2147483642 tag=null importance=3 key=0|com.google.android.deskclock|2147483642|null|10343: Notification(channel=Stopwatch v2 shortcut=null contentView=com.google.android.deskclock/0x7f0e0044 vibrate=null sound=null defaults=0 flags=AUTO_CANCEL|LOCAL_ONLY color=0xffa1cde1 groupKey=5 actions=2 vis=PRIVATE))
+      uid=10343 userId=0
+      opPkg=com.google.android.deskclock
+      icon=Icon(typ=RESOURCE pkg=com.google.android.deskclock id=0x7f0803dd)
+      flags=AUTO_CANCEL|LOCAL_ONLY
+      originalFlags=AUTO_CANCEL|LOCAL_ONLY
+      pri=2
+      key=0|com.google.android.deskclock|2147483642|null|10343
+      seen=true
+      groupKey=0|com.google.android.deskclock|g:5
+      notification=
+            fullscreenIntent=null
+            contentIntent=PendingIntent{3b01a8: PendingIntentRecord{29359dd com.google.android.deskclock startActivity (allowlist: 44a8359:+30s0ms/0/NOTIFICATION_SERVICE/NotificationManagerService)}}
+            deleteIntent=PendingIntent{39114c1: PendingIntentRecord{accf9b4 com.google.android.deskclock broadcastIntent (allowlist: 44a8359:+30s0ms/0/NOTIFICATION_SERVICE/NotificationManagerService)}}
+            number=0
+            groupAlertBehavior=0
+            when=1790064156079/1790064156079
+            tickerText=null
+            vis=0
+            contentView=com.google.android.deskclock/0x7f0e0044 (0 bytes): android.widget.RemoteViews@75ed466
+            bigContentView=null
+            headsUpContentView=null
+            color=0xffa1cde1
+            timeout=PT72H
+            actions={
+                [0] "開始" -> PendingIntent{4fbb3a7: PendingIntentRecord{3c184d5 com.google.android.deskclock broadcastIntent (allowlist: 44a8359:+30s0ms/0/NOTIFICATION_SERVICE/NotificationManagerService)}}
+                [1] "リセット" -> PendingIntent{a129054: PendingIntentRecord{ad958c com.google.android.deskclock broadcastIntent (allowlist: 44a8359:+30s0ms/0/NOTIFICATION_SERVICE/NotificationManagerService)}}
+              }
+            extras={
+                android.title=null
+                android.reduced.images=Boolean (true)
+                android.subText=null
+                android.template=String (android.app.Notification$DecoratedCustomViewStyle)
+                android.showChronometer=Boolean (false)
+                android.text=null
+                android.progress=Integer (0)
+                androidx.core.app.extra.COMPAT_TEMPLATE=String (androidx.core.app.NotificationCompat$DecoratedCustomViewStyle)
+                android.progressMax=Integer (0)
+                android.appInfo=ApplicationInfo (ApplicationInfo{6d93bfd com.google.android.deskclock})
+                android.contains.customView=Boolean (true)
+                android.showWhen=Boolean (true)
+                android.largeIcon=null
+                android.infoText=null
+                android.progressIndeterminate=Boolean (false)
+                android.remoteInputHistory=null
+                android.shortCriticalText=null
+            }
+      publicNotification=
+            None
+      stats=SingleNotificationStats{posttimeElapsedMs=107521616, posttimeToFirstClickMs=-1, posttimeToDismissMs=-1, airtimeCount=20, airtimeMs=186791, currentAirtimeStartElapsedMs=-1, airtimeExpandedMs=0, posttimeToFirstVisibleExpansionMs=-1, currentAirtimeExpandedStartElapsedMs=-1, requestedImportance=4, naturalImportance=3, isNoisy=false}
+      mContactAffinity=0.0
+      mPackagePriority=0
+      mPackageVisibility=-1000
+      mSystemImportance=UNSPECIFIED
+      mAsstImportance=UNSPECIFIED
+      mImportance=DEFAULT
+      mImportanceExplanation=app
+      mProposedImportance=UNSPECIFIED
+      mIsAppImportanceLocked=false
+      mSensitiveContent=false
+      mCanceledAfterLifetimeExtension=false
+      mIntercept=false
+      mHidden==false
+      mGlobalSortKey=crtcl=0x0002:intrsv=2:grnk=0x0014:gsmry=1:nsk:rnk=0x0014
+      mRankingTimeMs=1790064156079
+      mCreationTimeMs=1790064141160
+      mVisibleSinceMs=1790159443751
+      mUpdateTimeMs=1790064156083
+      mInterruptionTimeMs=1790159443751
+      mSuppressedVisualEffects= 0
+      mSound= null
+      mVibration= null
+      mAttributes= AudioAttributes: usage=USAGE_NOTIFICATION content=CONTENT_TYPE_SONIFICATION flags=0x800(FLAG_MUTE_HAPTIC)  tags= bundle=null
+      mLight= null
+      mShowBadge=false
+      mColorized=false
+      mAllowBubble=false
+      isBubble=false
+      mIsInterruptive=true
+      effectiveNotificationChannel=NotificationChannel{mId='Stopwatch v2', mName=ストップウォッチ, mDescription=, mImportance=3, mBypassDnd=false, mLockscreenVisibility=-1000, mSound=null, mLights=false, mLightColor=0, mVibrationPattern=null, mVibrationEffect=null, mUserLockedFields=0, mUserVisibleTaskShown=false, mVibrationEnabled=false, mShowBadge=false, mDeleted=false, mDeletedTimeMs=-1, mGroup='null', mAudioAttributes=AudioAttributes: usage=USAGE_NOTIFICATION content=CONTENT_TYPE_SONIFICATION flags=0x800(FLAG_MUTE_HAPTIC)  tags= bundle=null, mBlockableSystem=false, mAllowBubbles=-1, mImportanceLockedDefaultApp=false, mOriginalImp=3, mParent=null, mConversationId=null, mDemoted=false, mImportantConvo=false, mLastNotificationUpdateTimeMs=0}
+      mAdjustments=[]
+      shortcut=null found valid? false
+      mUserVisOverride=-1000
+      hasSummarization=false
+      bundleType=0
+    NotificationRecord(0x083940b1: pkg=com.google.android.deskclock user=UserHandle{0} id=2147483641 tag=null importance=3 key=0|com.google.android.deskclock|2147483641|null|10343: Notification(channel=Timers v2 shortcut=null contentView=com.google.android.deskclock/0x7f0e0043 vibrate=null sound=null defaults=0 flags=LOCAL_ONLY color=0xffa1cde1 groupKey=4 sortKey=1 0|↺3|RUNNING|▶19:43:02.137|Σ0:10:00|Δ0:00:00|⏳0:10:00 actions=2 vis=PUBLIC))
+      uid=10343 userId=0
+      opPkg=com.google.android.deskclock
+      icon=Icon(typ=RESOURCE pkg=com.google.android.deskclock id=0x7f0803e7)
+      flags=LOCAL_ONLY
+      originalFlags=LOCAL_ONLY
+      pri=1
+      key=0|com.google.android.deskclock|2147483641|null|10343
+      seen=false
+      groupKey=0|com.google.android.deskclock|g:4
+      notification=
+            fullscreenIntent=null
+            contentIntent=PendingIntent{bfca996: PendingIntentRecord{a3f9e87 com.google.android.deskclock startActivity (allowlist: 44a8359:+30s0ms/0/NOTIFICATION_SERVICE/NotificationManagerService)}}
+            deleteIntent=PendingIntent{6441917: PendingIntentRecord{6556152 com.google.android.deskclock broadcastIntent (allowlist: 44a8359:+30s0ms/0/NOTIFICATION_SERVICE/NotificationManagerService)}}
+            number=0
+            groupAlertBehavior=0
+            when=1790160182141/1790160182141
+            tickerText=null
+            vis=1
+            contentView=com.google.android.deskclock/0x7f0e0043 (0 bytes): android.widget.RemoteViews@96de104
+            bigContentView=null
+            headsUpContentView=null
+            color=0xffa1cde1
+            timeout=PT72H
+            actions={
+                [0] "一時停止" -> PendingIntent{b7036ed: PendingIntentRecord{2cdd1b4 com.google.android.deskclock broadcastIntent (allowlist: 44a8359:+30s0ms/0/NOTIFICATION_SERVICE/NotificationManagerService)}}
+                [1] "1分追加" -> PendingIntent{7d1c922: PendingIntentRecord{cbf51dd com.google.android.deskclock broadcastIntent (allowlist: 44a8359:+30s0ms/0/NOTIFICATION_SERVICE/NotificationManagerService)}}
+              }
+            extras={
+                android.title=null
+                android.reduced.images=Boolean (true)
+                android.subText=null
+                android.template=String (android.app.Notification$DecoratedCustomViewStyle)
+                android.showChronometer=Boolean (false)
+                android.text=null
+                android.progress=Integer (0)
+                androidx.core.app.extra.COMPAT_TEMPLATE=String (androidx.core.app.NotificationCompat$DecoratedCustomViewStyle)
+                android.progressMax=Integer (0)
+                android.appInfo=ApplicationInfo (ApplicationInfo{1e72fb3 com.google.android.deskclock})
+                android.contains.customView=Boolean (true)
+                android.showWhen=Boolean (false)
+                android.largeIcon=null
+                android.infoText=null
+                android.progressIndeterminate=Boolean (false)
+                android.remoteInputHistory=null
+                android.shortCriticalText=null
+            }
+      publicNotification=
+            None
+      stats=SingleNotificationStats{posttimeElapsedMs=203564662, posttimeToFirstClickMs=-1, posttimeToDismissMs=-1, airtimeCount=0, airtimeMs=0, currentAirtimeStartElapsedMs=-1, airtimeExpandedMs=0, posttimeToFirstVisibleExpansionMs=-1, currentAirtimeExpandedStartElapsedMs=-1, requestedImportance=4, naturalImportance=3, isNoisy=false}
+      mContactAffinity=0.0
+      mPackagePriority=0
+      mPackageVisibility=-1000
+      mSystemImportance=UNSPECIFIED
+      mAsstImportance=UNSPECIFIED
+      mImportance=DEFAULT
+      mImportanceExplanation=app
+      mProposedImportance=UNSPECIFIED
+      mIsAppImportanceLocked=false
+      mSensitiveContent=false
+      mCanceledAfterLifetimeExtension=false
+      mIntercept=false
+      mHidden==false
+      mGlobalSortKey=crtcl=0x0002:intrsv=2:grnk=0x0000:gsmry=1:gsk=1 0|↺3|RUNNING|▶19:43:02.137|Σ0:10:00|Δ0:00:00|⏳0:10:00:rnk=0x0000
+      mRankingTimeMs=1790160182141
+      mCreationTimeMs=1790160182143
+      mVisibleSinceMs=0
+      mUpdateTimeMs=1790160182143
+      mInterruptionTimeMs=1790160182345
+      mSuppressedVisualEffects= 0
+      mSound= null
+      mVibration= null
+      mAttributes= AudioAttributes: usage=USAGE_NOTIFICATION content=CONTENT_TYPE_SONIFICATION flags=0x800(FLAG_MUTE_HAPTIC)  tags= bundle=null
+      mLight= null
+      mShowBadge=false
+      mColorized=false
+      mAllowBubble=false
+      isBubble=false
+      mIsInterruptive=true
+      effectiveNotificationChannel=NotificationChannel{mId='Timers v2', mName=タイマー, mDescription=, mImportance=3, mBypassDnd=false, mLockscreenVisibility=-1000, mSound=null, mLights=false, mLightColor=0, mVibrationPattern=null, mVibrationEffect=null, mUserLockedFields=0, mUserVisibleTaskShown=false, mVibrationEnabled=false, mShowBadge=false, mDeleted=false, mDeletedTimeMs=-1, mGroup='null', mAudioAttributes=AudioAttributes: usage=USAGE_NOTIFICATION content=CONTENT_TYPE_SONIFICATION flags=0x800(FLAG_MUTE_HAPTIC)  tags= bundle=null, mBlockableSystem=false, mAllowBubbles=-1, mImportanceLockedDefaultApp=false, mOriginalImp=3, mParent=null, mConversationId=null, mDemoted=false, mImportantConvo=false, mLastNotificationUpdateTimeMs=0}
+      mAdjustments=[]
+      shortcut=null found valid? false
+      mUserVisOverride=-1000
+      hasSummarization=false
+      bundleType=0

@@ -1,0 +1,485 @@
+package dev.ryunosuke.island.ui.app
+
+import android.Manifest
+import android.app.NotificationManager
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Bundle
+import android.os.SystemClock
+import android.provider.Settings
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
+import dev.ryunosuke.island.IslandApp
+import dev.ryunosuke.island.builtin.TimerPicker
+import dev.ryunosuke.island.data.IslandSettings
+import dev.ryunosuke.island.island.ClockCommand
+import dev.ryunosuke.island.island.DemoController
+import dev.ryunosuke.island.island.IslandAlert
+import dev.ryunosuke.island.island.TimeFormat
+import dev.ryunosuke.island.overlay.IslandOverlayService
+import dev.ryunosuke.island.source.BatterySaver
+import dev.ryunosuke.island.source.IslandNotificationListener
+import dev.ryunosuke.island.ui.island.IslandColors
+import dev.ryunosuke.island.ui.island.IslandText
+import dev.ryunosuke.island.ui.island.content.rememberElapsedClock
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
+
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        enableEdgeToEdge()
+        super.onCreate(savedInstanceState)
+        setContent { AppTheme { MainScreen() } }
+    }
+}
+
+private data class Access(
+    val accessibility: Boolean,
+    val listener: Boolean,
+    val bluetooth: Boolean,
+    val notifications: Boolean,
+    val microphone: Boolean,
+    val secureSettings: Boolean,
+)
+
+private fun readAccess(context: Context): Access {
+    val a11y = ComponentName(context, IslandOverlayService::class.java).flattenToString()
+    val enabled = Settings.Secure.getString(context.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES).orEmpty()
+    val nm = context.getSystemService(NotificationManager::class.java)
+    return Access(
+        accessibility = enabled.split(':').any { it.equals(a11y, ignoreCase = true) },
+        listener = nm.isNotificationListenerAccessGranted(ComponentName(context, IslandNotificationListener::class.java)),
+        bluetooth = context.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED,
+        notifications = context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED,
+        microphone = context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED,
+        secureSettings = BatterySaver.canToggle(context),
+    )
+}
+
+@Composable
+private fun MainScreen() {
+    val context = LocalContext.current
+    val g = IslandApp.graph
+    val settings by g.settings.collectAsState()
+    val scope = rememberCoroutineScope()
+    fun update(f: (IslandSettings) -> IslandSettings) = scope.launch { g.settingsStore.update(f) }
+
+    // 設定画面から戻ってきたら権限の状態を読み直す
+    var access by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(readAccess(context)) }
+    val lifecycle = LocalLifecycleOwner.current
+    LaunchedEffect(lifecycle) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            while (true) {
+                access = readAccess(context)
+                delay(1_500)
+            }
+        }
+    }
+    val permissions = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        access = readAccess(context)
+    }
+
+    LazyColumn(
+        Modifier.fillMaxSize().background(Color.Black).safeDrawingPadding(),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        item {
+            Text("Island", fontSize = 34.sp, fontWeight = FontWeight.Bold, color = Color.White)
+            Text(
+                "Pixel 6a のカメラ位置に Dynamic Island を出します",
+                color = IslandColors.Secondary, fontSize = 14.sp,
+            )
+        }
+
+        item {
+            Section("セットアップ") {
+                AccessRow(
+                    "アクセシビリティ", "島を画面の最上部に描くのに使います", access.accessibility,
+                ) { openAccessibility(context) }
+                AccessRow(
+                    "通知へのアクセス", "音楽・通話・タイマー・ナビを読み取ります", access.listener,
+                ) { openListener(context) }
+                AccessRow(
+                    "Bluetooth", "イヤホンがつながったときに名前と電池を出します", access.bluetooth,
+                ) { permissions.launch(arrayOf(Manifest.permission.BLUETOOTH_CONNECT)) }
+                AccessRow(
+                    "通知", "画面が消えているときに内蔵タイマーの終了を知らせます", access.notifications,
+                ) { permissions.launch(arrayOf(Manifest.permission.POST_NOTIFICATIONS)) }
+                if (settings.audioWaveform) {
+                    AccessRow(
+                        "マイク", "音楽の波形を実際の音に合わせます（出ている音の強さを見るだけで、録音はしません）", access.microphone,
+                    ) { permissions.launch(arrayOf(Manifest.permission.RECORD_AUDIO)) }
+                }
+                AccessRow(
+                    "省電力の切り替え",
+                    if (access.secureSettings) "電池残量低下の表示をタップすると、バッテリー セーバーをすぐオンにします"
+                    else "PC から下のコマンドを一度実行すると、電池残量低下の表示のタップでバッテリー セーバーをすぐオンにできます（無ければ設定画面を開きます）",
+                    access.secureSettings,
+                    fixLabel = "コピー",
+                ) { copy(context, BatterySaver.GRANT_COMMAND) }
+                if (!access.secureSettings) {
+                    Text(
+                        BatterySaver.GRANT_COMMAND,
+                        color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace,
+                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Color(0xFF2C2C2E)).padding(8.dp),
+                    )
+                }
+                if (!access.accessibility) {
+                    Text(
+                        "アクセシビリティのスイッチが灰色で押せないときは、アプリ情報の右上 ⋮ から「制限付き設定を許可」を選んでから戻ってください。",
+                        color = IslandColors.Secondary, fontSize = 13.sp,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                    TextButton(onClick = { openAppInfo(context) }) { Text("アプリ情報を開く") }
+                }
+            }
+        }
+
+        item { BuiltinClock() }
+
+        item {
+            Section("デモ") {
+                Text("本物の出来事を待たずに見た目と操作を試せます。長押しで展開、左右スワイプでしまいます。しまったあとは、残った島をタップ（または左右にスワイプ）すると戻ります。", color = IslandColors.Secondary, fontSize = 13.sp)
+                Spacer(Modifier.height(8.dp))
+                DemoButtons()
+            }
+        }
+
+        item {
+            Section("位置と大きさ") {
+                Text("カメラの穴にぴったり重なるように合わせます。0 は自動です。", color = IslandColors.Secondary, fontSize = 13.sp)
+                SliderRow("高さ", settings.heightDp, 0f..56f, "dp") { v -> update { it.copy(heightDp = v) } }
+                SliderRow("中央の幅", settings.centerWidthDp, 0f..200f, "dp") { v -> update { it.copy(centerWidthDp = v) } }
+                SliderRow("左右", settings.offsetXDp, -40f..40f, "dp") { v -> update { it.copy(offsetXDp = v) } }
+                SliderRow("上下", settings.offsetYDp, -20f..20f, "dp") { v -> update { it.copy(offsetYDp = v) } }
+                TextButton(onClick = {
+                    update { it.copy(heightDp = 0f, centerWidthDp = 0f, offsetXDp = 0f, offsetYDp = 0f) }
+                }) { Text("自動に戻す") }
+            }
+        }
+
+        item {
+            Section("出すもの") {
+                SwitchRow("音楽・動画", settings.media) { v -> update { it.copy(media = v) } }
+                SwitchRow("通話", settings.calls) { v -> update { it.copy(calls = v) } }
+                SwitchRow("時計アプリのタイマー・ストップウォッチ・アラーム", settings.clockMirror) { v -> update { it.copy(clockMirror = v) } }
+                SwitchRow("ナビ", settings.navigation) { v -> update { it.copy(navigation = v) } }
+                SwitchRow("その他の進行中のもの（DL・配達・録画など）", settings.otherLive) { v -> update { it.copy(otherLive = v) } }
+                HorizontalDivider(Modifier.padding(vertical = 6.dp), color = Color(0xFF2C2C2E))
+                SwitchRow("充電", settings.charging) { v -> update { it.copy(charging = v) } }
+                SwitchRow("バッテリー残量低下", settings.lowBattery) { v -> update { it.copy(lowBattery = v) } }
+                SwitchRow("サイレント・バイブの切り替え", settings.ringer) { v -> update { it.copy(ringer = v) } }
+                SwitchRow("おやすみモード", settings.dnd) { v -> update { it.copy(dnd = v) } }
+                SwitchRow("イヤホンの接続", settings.bluetooth) { v -> update { it.copy(bluetooth = v) } }
+                SwitchRow("ロック解除", settings.unlock) { v -> update { it.copy(unlock = v) } }
+            }
+        }
+
+        item {
+            Section("振る舞い") {
+                SwitchRow("何もないときも島を出す（iPhone と同じ）", settings.idleVisible) { v -> update { it.copy(idleVisible = v) } }
+                SpeedRow(settings.animationSpeed) { v -> update { it.copy(animationSpeed = v) } }
+                SwitchRow("音楽の波形を実際の音に合わせる（低い音が左、高い音が右）", settings.audioWaveform) { v ->
+                    update { it.copy(audioWaveform = v) }
+                    if (v && !access.microphone) permissions.launch(arrayOf(Manifest.permission.RECORD_AUDIO))
+                }
+                SwitchRow("全画面のアプリでは隠す", settings.hideFullscreen) { v -> update { it.copy(hideFullscreen = v) } }
+                SwitchRow("横向きでは隠す", settings.hideLandscape) { v -> update { it.copy(hideLandscape = v) } }
+                SwitchRow("通知シェードを開いたら隠す", settings.hideShade) { v -> update { it.copy(hideShade = v) } }
+                SliderRow(
+                    "一時停止した音楽を隠すまで", settings.mediaPausedTimeoutSec.toFloat(), 5f..600f, "秒",
+                ) { v -> update { it.copy(mediaPausedTimeoutSec = v.toInt()) } }
+            }
+        }
+
+        item { ExcludedApps(settings) { v -> update { it.copy(excludedPackages = v) } } }
+    }
+}
+
+// ---- 内蔵ストップウォッチ・タイマー ----
+
+@Composable
+private fun BuiltinClock() {
+    val clock = IslandApp.graph.clock
+    val sw by clock.stopwatch.collectAsState()
+    val timer by clock.timer.collectAsState()
+    val now by rememberElapsedClock(50, sw.running || timer.running)
+    Section("ストップウォッチ・タイマー") {
+        Text("クイック設定にも「ストップウォッチ」「タイマー」のタイルがあります。", color = IslandColors.Secondary, fontSize = 13.sp)
+        Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                TimeFormat.stopwatch(sw.elapsed(maxOf(now, SystemClock.elapsedRealtime()))),
+                style = IslandText.bigTime.copy(fontSize = 34.sp),
+                modifier = Modifier.weight(1f),
+            )
+            if (sw.active) {
+                OutlinedButton(onClick = {
+                    clock.handle(if (sw.running) ClockCommand.StopwatchLap else ClockCommand.StopwatchReset)
+                }) { Text(if (sw.running) "ラップ" else "リセット") }
+                Spacer(Modifier.width(8.dp))
+            }
+            Button(onClick = { clock.handle(ClockCommand.StopwatchToggle) }) {
+                Text(if (sw.running) "一時停止" else if (sw.active) "再開" else "開始")
+            }
+        }
+        if (sw.laps.isNotEmpty()) {
+            Text(
+                sw.laps.mapIndexed { i, t -> "ラップ ${i + 1}  ${TimeFormat.stopwatch(t)}" }.reversed().take(5).joinToString("\n"),
+                color = IslandColors.Secondary, style = IslandText.tabular, fontSize = 13.sp,
+            )
+        }
+        HorizontalDivider(Modifier.padding(vertical = 12.dp), color = Color(0xFF2C2C2E))
+        if (timer.active) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    if (timer.ringing) "終了" else TimeFormat.countdown(timer.remaining(maxOf(now, SystemClock.elapsedRealtime()))),
+                    style = IslandText.bigTime.copy(fontSize = 34.sp, color = IslandColors.Orange),
+                    modifier = Modifier.weight(1f),
+                )
+                OutlinedButton(onClick = {
+                    clock.handle(if (timer.ringing) ClockCommand.TimerStopRinging else ClockCommand.TimerCancel)
+                }) { Text(if (timer.ringing) "停止" else "キャンセル") }
+                if (!timer.ringing) {
+                    Spacer(Modifier.width(8.dp))
+                    Button(onClick = { clock.handle(ClockCommand.TimerToggle) }) { Text(if (timer.running) "一時停止" else "再開") }
+                }
+            }
+        } else {
+            TimerPicker(clock.lastTimerMs, onStart = { clock.startTimer(it) }, onCancel = null)
+        }
+    }
+}
+
+// ---- デモ ----
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun DemoButtons() {
+    val g = IslandApp.graph
+    val types = listOf(
+        "音楽" to DemoController.Type.Media,
+        "着信" to DemoController.Type.IncomingCall,
+        "通話中" to DemoController.Type.OngoingCall,
+        "タイマー" to DemoController.Type.Timer,
+        "ストップウォッチ" to DemoController.Type.Stopwatch,
+        "アラーム" to DemoController.Type.Alarm,
+        "ナビ" to DemoController.Type.Navigation,
+        "ダウンロード" to DemoController.Type.Download,
+        "画面録画" to DemoController.Type.Recording,
+    )
+    val alerts = listOf(
+        "充電" to IslandAlert.Charging(76),
+        "残量低下" to IslandAlert.LowBattery(20),
+        "サイレント" to IslandAlert.Ringer(android.media.AudioManager.RINGER_MODE_SILENT),
+        "着信音" to IslandAlert.Ringer(android.media.AudioManager.RINGER_MODE_NORMAL),
+        "おやすみ" to IslandAlert.Dnd(true),
+        "イヤホン" to IslandAlert.Device("AirPods Pro", 82, wired = false),
+        "ロック解除" to IslandAlert.Unlock,
+    )
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        for ((label, t) in types) FilledTonalButton(onClick = { g.demo.show(t) }) { Text(label) }
+    }
+    Spacer(Modifier.height(8.dp))
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        for ((label, a) in alerts) OutlinedButton(onClick = { g.arbiter.postAlert(a) }) { Text(label) }
+    }
+    TextButton(onClick = { g.demo.clear() }) { Text("デモを消す") }
+}
+
+// ---- 除外アプリ ----
+
+@Composable
+private fun ExcludedApps(settings: IslandSettings, onChange: (Set<String>) -> Unit) {
+    val context = LocalContext.current
+    val seen by IslandApp.graph.notifications.seenLivePackages.collectAsState()
+    val all = (seen + settings.excludedPackages).sorted()
+    Section("その他の進行中のもの：出さないアプリ") {
+        if (all.isEmpty()) {
+            Text("進行中の通知を出したアプリがここに並びます。", color = IslandColors.Secondary, fontSize = 13.sp)
+        }
+        for (pkg in all) {
+            val label = remember(pkg) {
+                runCatching {
+                    context.packageManager.getApplicationLabel(context.packageManager.getApplicationInfo(pkg, 0)).toString()
+                }.getOrDefault(pkg)
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(
+                    checked = pkg in settings.excludedPackages,
+                    onCheckedChange = { on -> onChange(if (on) settings.excludedPackages + pkg else settings.excludedPackages - pkg) },
+                )
+                Text(label, color = Color.White)
+            }
+        }
+    }
+}
+
+// ---- 部品 ----
+
+@Composable
+private fun Section(title: String, content: @Composable () -> Unit) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(Color(0xFF1C1C1E))
+            .padding(16.dp),
+    ) {
+        Text(title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(8.dp))
+        content()
+    }
+}
+
+@Composable
+private fun AccessRow(title: String, detail: String, ok: Boolean, fixLabel: String = "許可", onFix: () -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        androidx.compose.foundation.layout.Box(
+            Modifier.size(10.dp).clip(CircleShape).background(if (ok) IslandColors.Green else IslandColors.Red),
+        )
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, color = Color.White, fontSize = 15.sp)
+            Text(detail, color = IslandColors.Secondary, fontSize = 12.sp)
+        }
+        if (!ok) FilledTonalButton(onClick = onFix) { Text(fixLabel) }
+    }
+}
+
+@Composable
+private fun SwitchRow(title: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(title, color = Color.White, fontSize = 15.sp, modifier = Modifier.weight(1f))
+        Switch(checked = checked, onCheckedChange = onChange)
+    }
+}
+
+@Composable
+private fun SliderRow(title: String, value: Float, range: ClosedFloatingPointRange<Float>, unit: String, onChange: (Float) -> Unit) {
+    var local by remember(value) { mutableIntStateOf(value.toInt()) }
+    Column(Modifier.padding(top = 6.dp)) {
+        Row {
+            Text(title, color = Color.White, fontSize = 15.sp, modifier = Modifier.weight(1f))
+            Text(if (local == 0 && range.start == 0f && unit == "dp") "自動" else "$local $unit", color = IslandColors.Secondary, fontSize = 14.sp)
+        }
+        Slider(
+            value = local.toFloat(),
+            onValueChange = {
+                local = it.toInt()
+                onChange(local.toFloat())
+            },
+            valueRange = range,
+        )
+    }
+}
+
+/** 島の動きの速さ。1.0 が iOS 26 と同じ */
+@Composable
+private fun SpeedRow(value: Float, onChange: (Float) -> Unit) {
+    var local by remember(value) { androidx.compose.runtime.mutableFloatStateOf(value) }
+    Column(Modifier.padding(top = 6.dp)) {
+        Row {
+            Text("アニメーションの速さ", color = Color.White, fontSize = 15.sp, modifier = Modifier.weight(1f))
+            val label = "%.1f×".format(local)
+            Text(if (local == 1f) "$label（iOS 26 と同じ）" else label, color = IslandColors.Secondary, fontSize = 14.sp)
+        }
+        Slider(
+            value = local,
+            onValueChange = {
+                // 0.1 刻み
+                local = (it * 10).roundToInt() / 10f
+                onChange(local)
+            },
+            valueRange = 0.5f..2f,
+            steps = 14,
+        )
+    }
+}
+
+private fun copy(context: Context, text: String) {
+    val cm = context.getSystemService(ClipboardManager::class.java)
+    cm.setPrimaryClip(ClipData.newPlainText("adb", text))
+}
+
+// ---- 設定画面へ ----
+
+private fun openAccessibility(context: Context) {
+    val component = ComponentName(context, IslandOverlayService::class.java).flattenToString()
+    val detail = Intent("android.settings.ACCESSIBILITY_DETAILS_SETTINGS")
+        .putExtra(Intent.EXTRA_COMPONENT_NAME, component)
+    runCatching { context.startActivity(detail) }
+        .onFailure { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
+}
+
+private fun openListener(context: Context) {
+    val detail = Intent(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS)
+        .putExtra(
+            Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME,
+            ComponentName(context, IslandNotificationListener::class.java).flattenToString(),
+        )
+    runCatching { context.startActivity(detail) }
+        .onFailure { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }
+}
+
+private fun openAppInfo(context: Context) {
+    context.startActivity(
+        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null)),
+    )
+}

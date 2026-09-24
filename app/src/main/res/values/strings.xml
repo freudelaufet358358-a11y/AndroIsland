@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Island</string>
+    <string name="accessibility_label">Island（ダイナミックアイランド）</string>
+    <string name="accessibility_summary">カメラの位置に音楽・通話・タイマーなどを表示します</string>
+    <string name="accessibility_description">画面上部のカメラの周りに、再生中の音楽や通話、タイマー、ストップウォッチ、ナビ、充電などを表示するために使います。画面の内容は読み取りません。ウィンドウの一覧は、全画面表示や通知シェードが開いているかを調べるためだけに参照します。</string>
+    <string name="listener_label">Island の通知連携</string>
+    <string name="tile_stopwatch">ストップウォッチ</string>
+    <string name="tile_timer">タイマー</string>
+</resources>

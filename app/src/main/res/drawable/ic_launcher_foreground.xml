@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- 黒い島と、右に離れた丸 -->
+    <path android:fillColor="#FF000000"
+        android:pathData="M36,44h26a10,10 0 0 1 0,20h-26a10,10 0 0 1 0,-20z" />
+    <path android:fillColor="#FF000000"
+        android:pathData="M76,54m-10,0a10,10 0 1 1 20,0a10,10 0 1 1 -20,0" />
+    <path android:fillColor="#FFFF9F0A"
+        android:pathData="M36,54m-5,0a5,5 0 1 1 10,0a5,5 0 1 1 -10,0" />
+    <path android:fillColor="#FF30D158"
+        android:pathData="M72,50h2v8h-2zM75,48h2v12h-2zM78,51h2v6h-2z" />
+</vector>
