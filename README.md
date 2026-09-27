@@ -27,6 +27,20 @@ Bluetooth（イヤホン名と電池）・通知（内蔵タイマーの終了�
 adb shell pm grant dev.ryunosuke.island android.permission.WRITE_SECURE_SETTINGS
 ```
 
+### Shizuku（なくても使える）
+
+[Shizuku](https://shizuku.rikka.app/) が動いていれば、アプリが adb shell と同じ権限でシステムを呼べるので、次のことができる。
+
+- **許可をまとめて付ける。** セットアップ画面の Shizuku の行の「まとめて許可」で、アクセシビリティ・通知へのアクセス・
+  Bluetooth・通知・マイク・省電力の切り替え（WRITE_SECURE_SETTINGS）を PC なしで付ける。「制限付き設定を許可」の手順も要らない。
+  付けたものは端末の設定として残るので、あとで Shizuku が止まっても消えない
+- **省電力を島から直接入れ・切りする。** 設定画面やクイック設定で手動で入れた省電力も、島のボタンで切れる。
+  スケジュールには触らない（下の「省電力はシステムの『スケジュール』で入れる」の回り道が要らない）
+- **Recents で払ったアプリの音楽をすぐ消す。** 一時停止してから払ったものも、60 秒の猶予を待たずに消える
+
+root なしの Shizuku は端末を再起動すると止まる（Shizuku のアプリからワイヤレスデバッグで起動し直す）。
+止まっている間の省電力と Recents は、今までのやり方（スケジュール・Recents を開いている間に止まったら消す）に戻る。
+
 ビルド環境は [TOOLCHAIN.md](TOOLCHAIN.md)。
 
 ## できること
@@ -77,7 +91,7 @@ adb shell pm grant dev.ryunosuke.island android.permission.WRITE_SECURE_SETTINGS
 
 ```
 overlay/   AccessibilityService と、画面上部に置く 1 枚の透明な窓
-source/    通知リスナー（通知 → 活動）、MediaSession、端末の出来事
+source/    通知リスナー（通知 → 活動）、MediaSession、端末の出来事、Shizuku（ShizukuShell）
 builtin/   内蔵ストップウォッチ・タイマー、QS タイル、鳴動
 island/    活動のモデル、優先度と操作状態の調停（IslandArbiter）、ボタンの実行
 ui/island/ 島の描画。形は AGSL シェーダ、中身は Compose
@@ -105,6 +119,11 @@ ui/island/ 島の描画。形は AGSL シェーダ、中身は Compose
 - **省電力はシステムの「スケジュール」で入れる。** アプリからは PowerManager の切り替えを呼べず、
   設定の `low_power` を直接書くとシステムの状態が「オフ」のまま入り、設定画面やクイック設定から切れなくなる。
   そこで「残量が○%で自動オン」を今の残量 + 1% に一時的に合わせてシステムに入れてもらい、切れたら元のスケジュールに戻す
+- **Shizuku の呼び出しは 2 通り。** 省電力と許可の付与は、adb で打つのと同じコマンド（`cmd power set-mode`・`pm grant`・
+  `cmd notification allow_listener`・`settings put secure`）を Shizuku 側で動かす（隠し API に頼らないので Android の版に左右されにくい）。
+  最近のタスクの一覧だけは、shell の権限で `IActivityTaskManager#getRecentTasks` を呼ぶ（隠し API の制限は HiddenApiBypass で外す）。
+  Recents を開いたときの一覧と、開いている間 0.4 秒ごと（と閉じて 1.5 秒）に取り直した一覧を比べ、消えたタスクのアプリを払われたとみなす。
+  Shizuku の `newProcess` は API 13 で非公開になったのでリフレクションで呼ぶ（`proguard-rules.pro` で残している）
 - **通知の判定は純粋関数。** `NotificationSnapshot` → `NotificationParser` → 活動。JVM のテストで確かめている。
   Google 時計の独自レイアウト（RemoteViews）は自分のプロセスで展開して中の Chronometer を読む
 
@@ -125,6 +144,8 @@ tools/record_reference.sh            # 実機: WWDC23 の見本と同じ順番�
 `playraw <名前>` は `/sdcard/Android/data/dev.ryunosuke.island/files/` に置いた生データ（48kHz・モノラル・16bit）を、
 試験用の MediaSession を再生中にして鳴らし、終わると 5 本の棒の最大と平均をログに出す（実際の曲で波形を見る。メディアの音量が 0・ミュートだと解析に音が届かない）。
 通知の中身をログに出したいときは `adb shell setprop log.tag.IslandListener DEBUG`。
+`shizuku` は Shizuku の状態と、Shizuku で読んだ最近のタスクのアプリを `shizuku=Ready uid=2000 tasks=[…]` の 1 行でログに出す
+（`verify-on-device.sh` は Shizuku が使えるときだけ、これと「手動で入れた省電力を島で切れる」を確かめる）。
 
 ## Apple の見本との一致
 
@@ -220,6 +241,11 @@ Apple の WWDC23「Design dynamic Live Activities」（wwdc2023-10194）11:10 �
 まだ確かめていないもの（人の操作が要る）: 本物の着信・通話、音楽アプリ、イヤホンの接続、生体認証でのロック解除、
 着信音モードの切り替え、マップのナビ。
 
+Shizuku の対応（2026-09-27 に追加）はまだ実機で動かしていない。Android SDK を取れない環境で書いたので、
+Compose 以外のソースを API 37 のフレームワーク（Robolectric の android-all）に対して型チェックしただけ。
+実機では `./verify-on-device.sh` の「Shizuku」の段と、次を手で確かめる:
+「まとめて許可」で全部の行が緑になる、音楽を一時停止してから Recents で払うとすぐ消える。
+
 ## できないこと（Android の制約）
 
 - 島が横に広がると、その下にあるステータスバーのアイコンは隠れる（root なしではアイコンをずらせない）。
@@ -228,9 +254,10 @@ Apple の WWDC23「Design dynamic Live Activities」（wwdc2023-10194）11:10 �
 - 通話中のミュート・スピーカーは、電話アプリの通知にそのボタンがあるときだけ出る
 - 出力先ボタンは AirPlay ではなく Android の「メディア出力」ダイアログ（通知シェードの音楽の出力ボタンと同じもの）を開く
 - 一時停止してから Recents で払った音楽アプリは、システムから見て何も変わらないので、一時停止後の猶予（60 秒）まで残る
+  （Shizuku が動いていれば、最近のタスクの一覧から払われたと分かるのですぐ消える）
 - 出力音声が無音のとき（音量 0 で解析に音が届かない場合など）は、波形は擬似的な波になる
-- 省電力をアプリから入れ・切りするには adb での許可が要る（普通のアプリには切り替える権限がない）。充電中はオンにできない
-- 島ではなく設定画面やクイック設定で手動で入れた省電力は、アプリからは切れない（島のボタンは設定画面を開く）
-- 島から入れている間は、設定の「スケジュールの設定」に「残量 ○% でオン」が出る（切れると元に戻る）
+- 省電力をアプリから入れ・切りするには adb での許可か Shizuku が要る（普通のアプリには切り替える権限がない）。充電中はオンにできない
+- 島ではなく設定画面やクイック設定で手動で入れた省電力は、Shizuku が無いとアプリからは切れない（島のボタンは設定画面を開く）
+- Shizuku なしで島から入れている間は、設定の「スケジュールの設定」に「残量 ○% でオン」が出る（切れると元に戻る）
 - イヤホンの電池残量は機種の組み合わせによって取れない
 - フォントは SF Pro ではなく端末の標準フォント（SF Pro は再配布できない）

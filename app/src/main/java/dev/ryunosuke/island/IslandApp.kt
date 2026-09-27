@@ -35,7 +35,8 @@ class Graph(app: Application) {
     val settingsStore = SettingsStore(app, scope)
     val settings = settingsStore.settings
     val notifications = NotificationRepo(settings, app.packageName)
-    val recents = RecentsWatcher(app)
+    // media と互いに参照するので型を書く（推論が循環する）
+    val recents: RecentsWatcher = RecentsWatcher(app, onAppsRemoved = { media.onAppsRemoved(it) })
     val media = MediaSource(app, scope, settings, dismissedByRecents = recents::isOpenOrJustClosed)
     val clock = ClockEngine(app)
     val spectrum = AudioSpectrum(app)

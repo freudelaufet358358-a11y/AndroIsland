@@ -100,6 +100,22 @@ class MediaSource(
         onSessions(emptyList())
     }
 
+    /**
+     * Recents から払われたアプリ（Shizuku で分かったとき）。一時停止していたその再生は、猶予を待たずにすぐ消す
+     * （また再生すれば出る）。払っても再生を続けるアプリはそのまま出しておく
+     */
+    fun onAppsRemoved(packages: Set<String>) = main.post {
+        var changed = false
+        for (t in tracked.values) {
+            if (t.controller.packageName in packages && !isPlaying(t.controller) && t.pausedSince >= 0) {
+                t.pausedSince = -1L
+                changed = true
+                Log.i(TAG, "${t.controller.packageName} は一時停止中に Recents から払われたので消す")
+            }
+        }
+        if (changed) pick()
+    }
+
     fun controller(sessionKey: String): MediaController? =
         tracked.values.firstOrNull { keyOf(it.controller) == sessionKey }?.controller
 

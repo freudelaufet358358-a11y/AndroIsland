@@ -74,6 +74,7 @@ import dev.ryunosuke.island.island.TimeFormat
 import dev.ryunosuke.island.overlay.IslandOverlayService
 import dev.ryunosuke.island.source.BatterySaver
 import dev.ryunosuke.island.source.IslandNotificationListener
+import dev.ryunosuke.island.source.ShizukuShell
 import dev.ryunosuke.island.ui.island.IslandColors
 import dev.ryunosuke.island.ui.island.IslandText
 import dev.ryunosuke.island.ui.island.content.rememberElapsedClock
@@ -96,19 +97,19 @@ private data class Access(
     val notifications: Boolean,
     val microphone: Boolean,
     val secureSettings: Boolean,
+    val shizuku: ShizukuShell.Status,
 )
 
 private fun readAccess(context: Context): Access {
-    val a11y = ComponentName(context, IslandOverlayService::class.java).flattenToString()
-    val enabled = Settings.Secure.getString(context.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES).orEmpty()
     val nm = context.getSystemService(NotificationManager::class.java)
     return Access(
-        accessibility = enabled.split(':').any { it.equals(a11y, ignoreCase = true) },
+        accessibility = ShizukuSetup.isAccessibilityEnabled(context),
         listener = nm.isNotificationListenerAccessGranted(ComponentName(context, IslandNotificationListener::class.java)),
         bluetooth = context.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED,
         notifications = context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED,
         microphone = context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED,
         secureSettings = BatterySaver.canToggle(context),
+        shizuku = ShizukuShell.status(context),
     )
 }
 
@@ -150,6 +151,9 @@ private fun MainScreen() {
 
         item {
             Section("セットアップ") {
+                val missing = !access.accessibility || !access.listener || !access.bluetooth || !access.notifications ||
+                    (settings.audioWaveform && !access.microphone) || !access.secureSettings
+                ShizukuRow(access.shizuku, missing) { ShizukuSetup.grant(context, settings.audioWaveform) }
                 AccessRow(
                     "アクセシビリティ", "島を画面の最上部に描くのに使います", access.accessibility,
                 ) { openAccessibility(context) }
@@ -167,14 +171,18 @@ private fun MainScreen() {
                         "マイク", "音楽の波形を実際の音に合わせます（出ている音の強さを見るだけで、録音はしません）", access.microphone,
                     ) { permissions.launch(arrayOf(Manifest.permission.RECORD_AUDIO)) }
                 }
+                val directSaver = access.shizuku == ShizukuShell.Status.Ready
                 AccessRow(
                     "省電力の切り替え",
-                    if (access.secureSettings) "電池残量低下の表示をタップすると、バッテリー セーバーをすぐオンにします"
-                    else "PC から下のコマンドを一度実行すると、電池残量低下の表示のタップでバッテリー セーバーをすぐオンにできます（無ければ設定画面を開きます）",
-                    access.secureSettings,
+                    when {
+                        directSaver -> "電池残量低下の表示をタップすると、バッテリー セーバーをすぐ入れ・切りします（Shizuku を使うので、手動で入れたものも切れます）"
+                        access.secureSettings -> "電池残量低下の表示をタップすると、バッテリー セーバーをすぐオンにします"
+                        else -> "PC から下のコマンドを一度実行する（または上の Shizuku でまとめて許可する）と、電池残量低下の表示のタップでバッテリー セーバーをすぐオンにできます（無ければ設定画面を開きます）"
+                    },
+                    access.secureSettings || directSaver,
                     fixLabel = "コピー",
                 ) { copy(context, BatterySaver.GRANT_COMMAND) }
-                if (!access.secureSettings) {
+                if (!access.secureSettings && !directSaver) {
                     Text(
                         BatterySaver.GRANT_COMMAND,
                         color = Color.White, fontSize = 12.sp, fontFamily = FontFamily.Monospace,
@@ -183,7 +191,7 @@ private fun MainScreen() {
                 }
                 if (!access.accessibility) {
                     Text(
-                        "アクセシビリティのスイッチが灰色で押せないときは、アプリ情報の右上 ⋮ から「制限付き設定を許可」を選んでから戻ってください。",
+                        "アクセシビリティのスイッチが灰色で押せないときは、アプリ情報の右上 ⋮ から「制限付き設定を許可」を選んでから戻ってください（Shizuku があれば、上の「まとめて許可」で済みます）。",
                         color = IslandColors.Secondary, fontSize = 13.sp,
                         modifier = Modifier.padding(top = 8.dp),
                     )
@@ -385,6 +393,38 @@ private fun Section(title: String, content: @Composable () -> Unit) {
         Text(title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(8.dp))
         content()
+    }
+}
+
+/** Shizuku（なくても使える）。あれば下の許可をまとめて付けられ、省電力を島から直接入れ・切りできる */
+@Composable
+private fun ShizukuRow(status: ShizukuShell.Status, missing: Boolean, onGrant: () -> Unit) {
+    val context = LocalContext.current
+    AccessRow(
+        "Shizuku（なくても使えます）",
+        when (status) {
+            ShizukuShell.Status.NotInstalled ->
+                "入れると、下の許可を PC なしでまとめて付けられ、手動で入れた省電力も島から切れるようになります"
+            ShizukuShell.Status.NotRunning ->
+                "Shizuku のアプリで起動してください（root なしでは、端末を再起動するたびに起動し直します）"
+            ShizukuShell.Status.NoPermission ->
+                "Island に Shizuku の使用を許可すると、省電力を島から直接入れ・切りでき、足りない許可もまとめて付けます"
+            ShizukuShell.Status.Ready ->
+                if (missing) "下の足りない許可をまとめて付けられます"
+                else "省電力を島から直接入れ・切りし、Recents で払ったアプリの音楽をすぐ消します"
+        },
+        status == ShizukuShell.Status.Ready && !missing,
+        fixLabel = when (status) {
+            ShizukuShell.Status.NotInstalled -> "入手"
+            ShizukuShell.Status.NotRunning -> "開く"
+            ShizukuShell.Status.NoPermission -> "許可"
+            ShizukuShell.Status.Ready -> "まとめて許可"
+        },
+    ) {
+        when (status) {
+            ShizukuShell.Status.NotInstalled, ShizukuShell.Status.NotRunning -> ShizukuShell.openManager(context)
+            ShizukuShell.Status.NoPermission, ShizukuShell.Status.Ready -> onGrant()
+        }
     }
 }
 

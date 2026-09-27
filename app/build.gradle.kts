@@ -69,6 +69,11 @@ dependencies {
     implementation(libs.androidx.palette)
     implementation(libs.kotlinx.coroutines.android)
 
+    // adb shell と同じ権限でシステムを呼ぶ（省電力の直接の切り替え・許可の一括付与・最近のタスク）
+    implementation(libs.shizuku.api)
+    implementation(libs.shizuku.provider)
+    implementation(libs.hiddenapibypass)
+
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
 }

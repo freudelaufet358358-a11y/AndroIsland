@@ -26,6 +26,9 @@ import androidx.core.content.edit
  * システムに「自動でオン」の状態で入れてもらう。この状態なら設定画面・クイック設定のスイッチでも、充電でも普通に切れる。
  * 切れたら（島・設定画面・充電のどれでも）ユーザーの元のスケジュールに戻す。書き換えには adb で一度許可してもらう
  * WRITE_SECURE_SETTINGS が要る。無ければ設定の「バッテリー セーバー」画面を開く。
+ *
+ * Shizuku が使えるときは、shell の権限（DEVICE_POWER）で `cmd power set-mode` を動かして直接入れ・切りする
+ * （設定画面のスイッチと同じ PowerManager.setPowerSaveModeEnabled）。スケジュールに触らず、手動で入れた省電力も切れる。
  */
 object BatterySaver {
     const val GRANT_COMMAND = "adb shell pm grant dev.ryunosuke.island android.permission.WRITE_SECURE_SETTINGS"
@@ -60,6 +63,11 @@ object BatterySaver {
     }
 
     private fun turnOn(context: Context) {
+        if (ShizukuShell.isReady()) return setDirectly(context, true)
+        turnOnBySchedule(context)
+    }
+
+    private fun turnOnBySchedule(context: Context) {
         if (!canToggle(context)) return openSettings(context)
         val cr = context.contentResolver
         val prefs = prefs(context)
@@ -97,11 +105,43 @@ object BatterySaver {
 
     private fun turnOff(context: Context) {
         if (prefs(context).getBoolean(KEY_APPLIED, false) && canToggle(context)) {
-            // 島から入れたもの: スケジュールを戻せば、システムが「自動でオン」をやめて切る
+            // 島からスケジュールで入れたもの: スケジュールを戻せば、システムが「自動でオン」をやめて切る
             restore(context)
+        } else if (ShizukuShell.isReady()) {
+            // ユーザーが自分で（手動で）入れたものも、shell の権限なら切れる
+            setDirectly(context, false)
         } else {
-            // ユーザーが自分で（手動で）入れたものは、アプリからは切れない
+            // 手動で入れたものは、普通のアプリからは切れない
             openSettings(context)
+        }
+    }
+
+    /**
+     * Shizuku で `cmd power set-mode 1|0` を動かす（adb shell で打つのと同じ）。設定画面のスイッチで入れたのと同じ
+     * 「手動」の状態になるので、設定画面・クイック設定・充電でも普通に切れる。
+     * 充電中はシステムが入れないので、入らなければ設定画面を開く。Shizuku が途中で止まっていたら今までのやり方に戻す
+     */
+    private fun setDirectly(context: Context, on: Boolean) {
+        val app = context.applicationContext
+        if (on) turnedOnAt = SystemClock.elapsedRealtime()
+        ShizukuShell.handler.post {
+            val ok = runCatching { ShizukuShell.exec("cmd", "power", "set-mode", if (on) "1" else "0") }
+                .onFailure { Log.w(TAG, "Shizuku で切り替えられない", it) }
+                .isSuccess
+            main.post {
+                if (!ok) {
+                    turnedOnAt = 0L
+                    if (on) turnOnBySchedule(app) else openSettings(app)
+                    return@post
+                }
+                Log.i(TAG, "Shizuku で${if (on) "オン" else "オフ"}にした")
+                main.postDelayed({
+                    if (isOn(app) != on) {
+                        Log.i(TAG, "${if (on) "オン" else "オフ"}にならなかったので設定画面を開く")
+                        openSettings(app)
+                    }
+                }, CONFIRM_MS)
+            }
         }
     }
 

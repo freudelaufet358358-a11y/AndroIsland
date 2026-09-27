@@ -269,6 +269,14 @@ echo "== 省電力（電池残量低下の表示から。dumpsys battery で残�
 require_device
 saver() { A shell dumpsys power | sed -n '/Battery saver state machine/,/mState=/p' | grep -m1 -o "Enabled=[a-z]*"; }
 trig() { A shell settings get global low_power_trigger_level | tr -d '\r'; }
+# 電池残量低下の表示を出し、その省電力のボタンの位置を bx, by に入れる
+battery_button() {
+  cmd alert battery; sleep 1.2
+  read -r L T R B <<<"$(region)"
+  # ボタンは右端から 0.78H + 幅の半分（1.17H）。H は待機時の島の高さ（region の高さの 1/2.8）
+  bh=$(( (B - T) * 10 / 28 ))
+  bx=$(( R - bh * 195 / 100 )); by=$(( (T + B) / 2 ))
+}
 if ! A shell dumpsys package $PKG | grep -q "WRITE_SECURE_SETTINGS: granted=true"; then
   info "WRITE_SECURE_SETTINGS が未許可なので飛ばす（島のタップは設定画面を開く）"
 elif [[ "$(saver)" == "Enabled=true" ]]; then
@@ -278,11 +286,7 @@ else
   A shell dumpsys battery unplug >/dev/null
   A shell dumpsys battery set level 15 >/dev/null
   sleep 1
-  cmd alert battery; sleep 1.2
-  read -r L T R B <<<"$(region)"
-  # ボタンは右端から 0.78H + 幅の半分（1.17H）。H は待機時の島の高さ（region の高さの 1/2.8）
-  bh=$(( (B - T) * 10 / 28 ))
-  bx=$(( R - bh * 195 / 100 )); by=$(( (T + B) / 2 ))
+  battery_button
   A shell input tap $bx $by >/dev/null; sleep 1.5
   if [[ "$(saver)" == "Enabled=true" ]]; then pass "島のボタンで省電力が入る"; else fail "島のボタンで省電力が入らない"; fi
   shot "alert-battery-on"
@@ -295,6 +299,34 @@ else
   if [[ "$(saver)" == "Enabled=false" && "$(trig)" == "$before" ]]; then pass "島で入れた省電力を設定のスイッチで切れる（スケジュールも元に戻る）"; else fail "設定のスイッチで切れない — $(saver) 閾値=$(trig)"; fi
   A shell dumpsys battery reset >/dev/null
   info "電池の状態を元に戻した（省電力: $(saver)）"
+fi
+cmd clear
+
+echo "== Shizuku（動いていて、Island に使う許可が出ているときだけ） =="
+require_device
+A logcat -c >/dev/null
+cmd shizuku; sleep 1.5
+sz=$(A logcat -d -s IslandShell:I | grep -o 'shizuku=.*' | tail -1)
+if [[ "$sz" != shizuku=Ready* ]]; then
+  info "飛ばす（${sz:-応答なし}）"
+else
+  info "$sz"
+  if [[ "$sz" == *"tasks=[]"* || "$sz" == *"tasks=error"* ]]; then fail "Shizuku で最近のタスクを読めない"; else pass "Shizuku で最近のタスクを読める"; fi
+  if [[ "$(saver)" == "Enabled=true" ]]; then
+    info "省電力が既にオンなので触らない"
+  else
+    before=$(trig)
+    A shell dumpsys battery unplug >/dev/null
+    A shell dumpsys battery set level 15 >/dev/null
+    sleep 1
+    # 設定画面のスイッチで入れたのと同じ「手動」のオン（Shizuku が無いと島からは切れない）
+    A shell cmd power set-mode 1 >/dev/null; sleep 1
+    battery_button
+    A shell input tap $bx $by >/dev/null; sleep 1.5
+    if [[ "$(saver)" == "Enabled=false" && "$(trig)" == "$before" ]]; then pass "手動で入れた省電力を島のボタンで切れる（スケジュールには触らない）"; else fail "手動で入れた省電力を島から切れない — $(saver) 閾値=$(trig)"; A shell cmd power set-mode 0 >/dev/null; fi
+    A shell dumpsys battery reset >/dev/null
+    info "電池の状態を元に戻した（省電力: $(saver)）"
+  fi
 fi
 cmd clear
 

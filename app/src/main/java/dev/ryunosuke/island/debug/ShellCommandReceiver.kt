@@ -20,6 +20,7 @@ import dev.ryunosuke.island.island.DemoController
 import dev.ryunosuke.island.island.IslandActivity
 import dev.ryunosuke.island.island.IslandAlert
 import dev.ryunosuke.island.island.MediaActivity
+import dev.ryunosuke.island.source.ShizukuShell
 import kotlinx.coroutines.launch
 
 /**
@@ -31,7 +32,8 @@ import kotlinx.coroutines.launch
  * cmd: demo <Type> / alert <charging|battery|silent|ring|dnd|device|unlock> / clear /
  *      expand / collapse / media start|stop / state / idle on|off / refonly on|off / refseq / refseq26 /
  *      tone <Hz> <秒>（ごく小さな音を鳴らし、波形の解析結果をログに出す） /
- *      playraw <名前>（アプリ専用フォルダの 48kHz・モノラル・16bit の生データを、試験用の MediaSession を立てて鳴らす）
+ *      playraw <名前>（アプリ専用フォルダの 48kHz・モノラル・16bit の生データを、試験用の MediaSession を立てて鳴らす） /
+ *      shizuku（Shizuku の状態と、Shizuku で読んだ最近のタスクのアプリを "shizuku=…" の 1 行でログに出す）
  */
 class ShellCommandReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -56,6 +58,15 @@ class ShellCommandReceiver : BroadcastReceiver() {
             "playraw" -> DebugTone.playRaw(context.applicationContext, args.getOrNull(1) ?: "wave.raw")
             "refseq" -> ReferenceSequence.run()
             "refseq26" -> ReferenceSequence.runIos26()
+            "shizuku" -> {
+                val app = context.applicationContext
+                ShizukuShell.handler.post {
+                    val tasks = if (ShizukuShell.isReady()) {
+                        runCatching { ShizukuShell.recentTaskPackages().sorted().toString() }.getOrElse { "error:${it.javaClass.simpleName}" }
+                    } else "-"
+                    Log.i(TAG, "shizuku=${ShizukuShell.status(app)} uid=${ShizukuShell.uid()} tasks=$tasks")
+                }
+            }
         }
         Log.i(TAG, "cmd=${args.joinToString(" ")} state=${describe()}")
     }
