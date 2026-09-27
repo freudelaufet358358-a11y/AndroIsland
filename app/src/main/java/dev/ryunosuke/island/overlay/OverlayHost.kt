@@ -82,7 +82,7 @@ class OverlayHost(
                 val forceVisible by g.forceVisible.collectAsState()
                 val saverOn by g.batterySaverOn.collectAsState()
                 val metrics = remember(info, settings, forceAuto) {
-                    IslandMetrics.from(info, if (forceAuto) settings.copy(heightDp = 0f, centerWidthDp = 0f) else settings)
+                    IslandMetrics.from(info, if (forceAuto) settings.copy(heightDp = 0f, centerWidthDp = 0f, compactWidthDp = 0f, expandedWidthDp = 0f) else settings)
                 }
                 if (info.widthPx > 0) CompositionLocalProvider(
                     LocalAudioSpectrum provides if (settings.audioWaveform) g.spectrum else null,

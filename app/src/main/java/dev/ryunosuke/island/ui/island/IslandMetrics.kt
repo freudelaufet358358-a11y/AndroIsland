@@ -33,6 +33,8 @@ data class IslandMetrics(
     val sensorWidth: Float,
     /** コンパクト時の、中身と島の端の間 */
     val sidePad: Float,
+    /** 設定で決めたコンパクトの幅。0 は自動（[compactWidth] を見る） */
+    val fixedCompactWidth: Float,
     /** 展開時の左右の余白 */
     val margin: Float,
     /** 展開時の角の大きさ（超楕円の角が縁に沿って占める長さ）と指数 */
@@ -49,9 +51,30 @@ data class IslandMetrics(
 
     fun dp(px: Float) = px / density
 
+    /**
+     * コンパクトの幅。[edge] は片側の中身の幅と島の端との余白の和（左右の広い方）。
+     * 自動なら、カメラ部分の外に中身を置いた幅（iPhone と同じ）。設定で決めていればその幅にして、中身は両端に寄せる。
+     * ただし待機時の島より狭くはせず、中身がカメラ穴に被らないだけの間（穴 + 余白 1 つ分）は残す
+     */
+    fun compactWidth(edge: Float): Float {
+        if (fixedCompactWidth <= 0f) return sensorWidth + 2 * edge
+        return maxOf(fixedCompactWidth, sensorWidth, holeRadius * 2 + sidePad + 2 * edge)
+    }
+
     companion object {
         /** iPhone の島の高さ 37.33pt ÷ 画面幅 393pt */
         const val HEIGHT_PER_WIDTH = 37.33f / 393f
+
+        /** 待機時の島 126pt × 37.33pt（映像: 336×99px、比 3.39） */
+        const val IDLE_WIDTH_PER_HEIGHT = 3.375f
+
+        /** 展開したときの幅の下限。音楽の操作ボタン（中央の 3 つ）と右端の出力先ボタンが重ならない幅 */
+        const val MIN_EXPANDED_WIDTH_DP = 330f
+
+        /** 待機時の島の幅の目安（dp）。設定画面のスライダーに使う（カメラ穴の大きさは見ないので、実際と少しずれうる） */
+        fun idleWidthDp(screenWidthDp: Float, s: IslandSettings): Float =
+            if (s.centerWidthDp > 0) s.centerWidthDp
+            else (if (s.heightDp > 0) s.heightDp else screenWidthDp * HEIGHT_PER_WIDTH) * IDLE_WIDTH_PER_HEIGHT
 
         fun from(info: HostInfo, s: IslandSettings): IslandMetrics {
             val d = info.density
@@ -64,19 +87,24 @@ data class IslandMetrics(
             // 上端が画面の外に出ないように
             val top = (cy - h / 2).coerceAtLeast(2 * d)
             val cyFixed = top + h / 2
+            val w = info.widthPx.toFloat()
+            // 映像: 展開時の幅 373.2pt（画面 393pt）→ 左右 9.9pt = 0.265H。設定で決めていれば、下限から画面幅までに収めて画面の中央に置く
+            // （窓の幅がまだ分からない 0 のときも落ちないように、上限を後にかける）
+            val margin = if (s.expandedWidthDp > 0) {
+                (w - (s.expandedWidthDp * d).coerceAtLeast(MIN_EXPANDED_WIDTH_DP * d).coerceAtMost(w)) / 2
+            } else h * 0.265f
             return IslandMetrics(
                 density = d,
-                width = info.widthPx.toFloat(),
+                width = w,
                 cx = cx,
                 cy = cyFixed,
                 holeRadius = holeR,
                 height = h,
-                // 待機時の島 126pt × 37.33pt（映像: 336×99px、比 3.39）
-                sensorWidth = if (s.centerWidthDp > 0) s.centerWidthDp * d else h * 3.375f,
+                sensorWidth = if (s.centerWidthDp > 0) s.centerWidthDp * d else h * IDLE_WIDTH_PER_HEIGHT,
                 // HIG の寸法図: 中身は島の端から 0.35〜0.47H
                 sidePad = h * 0.40f,
-                // 映像: 展開時の幅 373.2pt（画面 393pt）→ 左右 9.9pt = 0.265H
-                margin = h * 0.265f,
+                fixedCompactWidth = s.compactWidthDp * d,
+                margin = margin,
                 // 映像: 展開時の角は超楕円（指数 3.2、縁に沿って 61pt = 1.634H）
                 expandedCornerExtent = h * 1.634f,
                 expandedCornerExponent = 3.2f,

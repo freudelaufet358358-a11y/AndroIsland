@@ -76,6 +76,7 @@ import dev.ryunosuke.island.source.BatterySaver
 import dev.ryunosuke.island.source.IslandNotificationListener
 import dev.ryunosuke.island.source.ShizukuShell
 import dev.ryunosuke.island.ui.island.IslandColors
+import dev.ryunosuke.island.ui.island.IslandMetrics
 import dev.ryunosuke.island.ui.island.IslandText
 import dev.ryunosuke.island.ui.island.content.rememberElapsedClock
 import kotlinx.coroutines.delay
@@ -212,13 +213,34 @@ private fun MainScreen() {
 
         item {
             Section("位置と大きさ") {
-                Text("カメラの穴にぴったり重なるように合わせます。0 は自動です。", color = IslandColors.Secondary, fontSize = 13.sp)
+                Text(
+                    "カメラの穴にぴったり重なるように合わせます。0（左端）は自動です。" +
+                        "広がったときの幅は待機時の幅より狭くならず、中身がカメラの穴に被らない幅は残します。",
+                    color = IslandColors.Secondary, fontSize = 13.sp,
+                )
+                // 縦向きの画面の幅（島は横向きでは隠す）
+                val screenDp = context.resources.displayMetrics.let { minOf(it.widthPixels, it.heightPixels) / it.density }
                 SliderRow("高さ", settings.heightDp, 0f..56f, "dp") { v -> update { it.copy(heightDp = v) } }
-                SliderRow("中央の幅", settings.centerWidthDp, 0f..200f, "dp") { v -> update { it.copy(centerWidthDp = v) } }
+                SliderRow("待機時の幅", settings.centerWidthDp, 0f..200f, "dp") { v -> update { it.copy(centerWidthDp = v) } }
+                AutoSizeRow(
+                    "広がったときの幅",
+                    settings.compactWidthDp,
+                    IslandMetrics.idleWidthDp(screenDp, settings).coerceAtMost(screenDp - 1f)..screenDp,
+                ) { v -> update { it.copy(compactWidthDp = v) } }
+                AutoSizeRow(
+                    "展開したときの幅",
+                    settings.expandedWidthDp,
+                    IslandMetrics.MIN_EXPANDED_WIDTH_DP.coerceAtMost(screenDp - 1f)..screenDp,
+                ) { v -> update { it.copy(expandedWidthDp = v) } }
                 SliderRow("左右", settings.offsetXDp, -40f..40f, "dp") { v -> update { it.copy(offsetXDp = v) } }
                 SliderRow("上下", settings.offsetYDp, -20f..20f, "dp") { v -> update { it.copy(offsetYDp = v) } }
                 TextButton(onClick = {
-                    update { it.copy(heightDp = 0f, centerWidthDp = 0f, offsetXDp = 0f, offsetYDp = 0f) }
+                    update {
+                        it.copy(
+                            heightDp = 0f, centerWidthDp = 0f, compactWidthDp = 0f, expandedWidthDp = 0f,
+                            offsetXDp = 0f, offsetYDp = 0f,
+                        )
+                    }
                 }) { Text("自動に戻す") }
             }
         }
@@ -466,6 +488,32 @@ private fun SliderRow(title: String, value: Float, range: ClosedFloatingPointRan
                 onChange(local.toFloat())
             },
             valueRange = range,
+        )
+    }
+}
+
+/**
+ * 0 を「自動」とする大きさのスライダー。左端のひと区切りが自動で、そのすぐ右から [range] の dp になる
+ * （下限より小さい値は意味がないので、0〜下限をスライダーに入れない）
+ */
+@Composable
+private fun AutoSizeRow(title: String, value: Float, range: ClosedFloatingPointRange<Float>, onChange: (Float) -> Unit) {
+    val auto = range.start - (range.endInclusive - range.start) * 0.08f
+    var local by remember(value, range) {
+        androidx.compose.runtime.mutableFloatStateOf(if (value <= 0f) auto else value.coerceIn(range))
+    }
+    Column(Modifier.padding(top = 6.dp)) {
+        Row {
+            Text(title, color = Color.White, fontSize = 15.sp, modifier = Modifier.weight(1f))
+            Text(if (local < range.start) "自動" else "${local.roundToInt()} dp", color = IslandColors.Secondary, fontSize = 14.sp)
+        }
+        Slider(
+            value = local,
+            onValueChange = {
+                local = it
+                onChange(if (it < range.start) 0f else it.roundToInt().toFloat())
+            },
+            valueRange = auto..range.endInclusive,
         )
     }
 }

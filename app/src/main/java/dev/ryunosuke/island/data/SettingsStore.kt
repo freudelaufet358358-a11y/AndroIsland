@@ -43,6 +43,10 @@ data class IslandSettings(
     // 位置と大きさの微調整。0 は「カットアウトから自動で決める」
     val heightDp: Float = 0f,
     val centerWidthDp: Float = 0f,
+    /** 広がったとき（コンパクト）の幅。0 は自動（中身に合わせる。iPhone と同じ） */
+    val compactWidthDp: Float = 0f,
+    /** 展開したときの幅。0 は自動（画面幅から左右 0.265H を除いた幅） */
+    val expandedWidthDp: Float = 0f,
     val offsetXDp: Float = 0f,
     val offsetYDp: Float = 0f,
     val excludedPackages: Set<String> = emptySet(),
@@ -74,6 +78,8 @@ class SettingsStore(private val context: Context, scope: CoroutineScope) {
         val audioWaveform = booleanPreferencesKey("audio_waveform")
         val heightDp = floatPreferencesKey("height_dp")
         val centerWidthDp = floatPreferencesKey("center_width_dp")
+        val compactWidthDp = floatPreferencesKey("compact_width_dp")
+        val expandedWidthDp = floatPreferencesKey("expanded_width_dp")
         val offsetXDp = floatPreferencesKey("offset_x_dp")
         val offsetYDp = floatPreferencesKey("offset_y_dp")
         val excluded = stringSetPreferencesKey("excluded_packages")
@@ -107,6 +113,8 @@ class SettingsStore(private val context: Context, scope: CoroutineScope) {
             p[K.audioWaveform] = s.audioWaveform
             p[K.heightDp] = s.heightDp
             p[K.centerWidthDp] = s.centerWidthDp
+            p[K.compactWidthDp] = s.compactWidthDp
+            p[K.expandedWidthDp] = s.expandedWidthDp
             p[K.offsetXDp] = s.offsetXDp
             p[K.offsetYDp] = s.offsetYDp
             p[K.excluded] = s.excludedPackages
@@ -137,6 +145,8 @@ class SettingsStore(private val context: Context, scope: CoroutineScope) {
             audioWaveform = this[K.audioWaveform] ?: d.audioWaveform,
             heightDp = this[K.heightDp] ?: d.heightDp,
             centerWidthDp = this[K.centerWidthDp] ?: d.centerWidthDp,
+            compactWidthDp = this[K.compactWidthDp] ?: d.compactWidthDp,
+            expandedWidthDp = this[K.expandedWidthDp] ?: d.expandedWidthDp,
             offsetXDp = this[K.offsetXDp] ?: d.offsetXDp,
             offsetYDp = this[K.offsetYDp] ?: d.offsetYDp,
             excludedPackages = this[K.excluded] ?: d.excludedPackages,

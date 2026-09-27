@@ -51,6 +51,7 @@ class ContentActions(
 /**
  * コンパクト表示の骨組み。左はカメラの左、右はカメラの右に寄せ、幅は広い方に揃えて左右対称にする
  * （島はカメラを中心に置くので、対称でないとカメラがずれて見える）。
+ * 設定で幅を決めていれば、その幅の両端に寄せる（[IslandMetrics.compactWidth]）。
  */
 @Composable
 fun CompactRow(m: IslandMetrics, leading: @Composable () -> Unit, trailing: @Composable () -> Unit) {
@@ -61,7 +62,7 @@ fun CompactRow(m: IslandMetrics, leading: @Composable () -> Unit, trailing: @Com
         val side = maxOf(lp.maxOfOrNull { it.width } ?: 0, tp.maxOfOrNull { it.width } ?: 0)
         val pad = m.sidePad.roundToInt()
         val h = m.height.roundToInt()
-        val w = (m.sensorWidth + 2 * (side + pad)).roundToInt()
+        val w = m.compactWidth((side + pad).toFloat()).roundToInt()
         layout(w, h) {
             lp.forEach { it.place(pad, (h - it.height) / 2) }
             tp.forEach { it.place(w - pad - it.width, (h - it.height) / 2) }
