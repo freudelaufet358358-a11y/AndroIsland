@@ -11,6 +11,21 @@ Android 16 の Live Updates、充電・電池残量低下・消音・おやす�
 ./deploy.sh            # リリース版をビルドして入れ、設定画面を開く
 ```
 
+PC が無ければ、GitHub Actions がビルドした APK を端末のブラウザで落として入れる（main に push するたびに作り直す）:
+<https://github.com/freudelaufet358358-a11y/AndroIsland/releases/latest/download/Island.apk>
+（過去の版は [Releases](https://github.com/freudelaufet358358-a11y/AndroIsland/releases)。初回は「提供元不明のアプリ」の許可が要る）
+
+GitHub Actions の APK を前の版に**上書きで**入れるには、署名の鍵を Secrets に入れておく
+（リポジトリは公開なので、鍵はリポジトリに置かない）。手元の debug 鍵を入れれば、`./deploy.sh` で入れたものにも上書きできる。
+
+```
+base64 -w0 ~/.android/debug.keystore    # macOS は base64 -i ~/.android/debug.keystore
+```
+
+出てきた文字列を GitHub の Settings → Secrets and variables → Actions → New repository secret に
+`SIGNING_KEYSTORE_BASE64` という名前で入れる（debug 鍵以外なら `SIGNING_STORE_PASSWORD`・`SIGNING_KEY_ALIAS`・`SIGNING_KEY_PASSWORD` も）。
+入れていない間は毎回違う鍵で署名されるので、新しい APK はアンインストールしてから入れ直すことになる。
+
 初回だけ端末で次の 2 つを許可する（アプリのセットアップ画面にボタンがある）。
 
 1. **アクセシビリティ** → Island をオン（島を画面の最上部に描くため）

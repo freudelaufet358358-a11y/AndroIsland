@@ -15,7 +15,23 @@ android {
         minSdk = 34
         targetSdk = 37
         versionCode = 2
-        versionName = "1.1"
+        // GitHub Actions のビルドには番号を付ける（どの APK を入れたか、アプリ情報で分かるように）
+        versionName = "1.1" + (providers.gradleProperty("islandBuild").orNull?.let { " (build $it)" } ?: "")
+    }
+
+    signingConfigs {
+        // GitHub Actions では Secrets の鍵で署名する（毎回同じ鍵にして、前の APK に上書きで入れられるように）。
+        // パスワードと別名を省くと debug 鍵の既定値（~/.android/debug.keystore をそのまま Secrets に入れた場合）
+        providers.environmentVariable("ISLAND_KEYSTORE").orNull?.let { path ->
+            fun env(name: String, default: String) =
+                providers.environmentVariable(name).orNull?.takeIf { it.isNotEmpty() } ?: default
+            create("island") {
+                storeFile = file(path)
+                storePassword = env("ISLAND_KEYSTORE_PASSWORD", "android")
+                keyAlias = env("ISLAND_KEY_ALIAS", "androiddebugkey")
+                keyPassword = env("ISLAND_KEY_PASSWORD", "android")
+            }
+        }
     }
 
     buildTypes {
@@ -23,8 +39,8 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            // 自分の端末に入れるだけなので debug 鍵で署名する
-            signingConfig = signingConfigs.getByName("debug")
+            // 自分の端末に入れるだけなので debug 鍵で署名する（GitHub Actions では上の鍵）
+            signingConfig = signingConfigs.findByName("island") ?: signingConfigs.getByName("debug")
         }
     }
 
