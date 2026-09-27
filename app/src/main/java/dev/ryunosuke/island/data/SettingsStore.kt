@@ -40,6 +40,11 @@ data class IslandSettings(
     val animationSpeed: Float = 1f,
     /** 音楽の波形を実際の音に合わせる（端末の出力音声を解析する。オフなら擬似的な波） */
     val audioWaveform: Boolean = true,
+    /**
+     * 2 つ同時で主の島が狭くなっている（右に丸が離れる）ときも、印の右にストップウォッチ・タイマー・通話・録画の時間を出す。
+     * オフなら iPhone と同じく印だけ
+     */
+    val splitTime: Boolean = true,
     // 位置と大きさの微調整。0 は「カットアウトから自動で決める」
     val heightDp: Float = 0f,
     val centerWidthDp: Float = 0f,
@@ -76,6 +81,7 @@ class SettingsStore(private val context: Context, scope: CoroutineScope) {
         val mediaPausedTimeoutSec = intPreferencesKey("media_paused_timeout_sec")
         val animationSpeed = floatPreferencesKey("animation_speed")
         val audioWaveform = booleanPreferencesKey("audio_waveform")
+        val splitTime = booleanPreferencesKey("split_time")
         val heightDp = floatPreferencesKey("height_dp")
         val centerWidthDp = floatPreferencesKey("center_width_dp")
         val compactWidthDp = floatPreferencesKey("compact_width_dp")
@@ -111,6 +117,7 @@ class SettingsStore(private val context: Context, scope: CoroutineScope) {
             p[K.mediaPausedTimeoutSec] = s.mediaPausedTimeoutSec
             p[K.animationSpeed] = s.animationSpeed
             p[K.audioWaveform] = s.audioWaveform
+            p[K.splitTime] = s.splitTime
             p[K.heightDp] = s.heightDp
             p[K.centerWidthDp] = s.centerWidthDp
             p[K.compactWidthDp] = s.compactWidthDp
@@ -143,6 +150,7 @@ class SettingsStore(private val context: Context, scope: CoroutineScope) {
             mediaPausedTimeoutSec = this[K.mediaPausedTimeoutSec] ?: d.mediaPausedTimeoutSec,
             animationSpeed = this[K.animationSpeed] ?: d.animationSpeed,
             audioWaveform = this[K.audioWaveform] ?: d.audioWaveform,
+            splitTime = this[K.splitTime] ?: d.splitTime,
             heightDp = this[K.heightDp] ?: d.heightDp,
             centerWidthDp = this[K.centerWidthDp] ?: d.centerWidthDp,
             compactWidthDp = this[K.compactWidthDp] ?: d.compactWidthDp,

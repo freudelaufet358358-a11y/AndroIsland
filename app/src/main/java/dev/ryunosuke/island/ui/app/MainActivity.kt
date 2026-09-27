@@ -270,6 +270,7 @@ private fun MainScreen() {
                     update { it.copy(audioWaveform = v) }
                     if (v && !access.microphone) permissions.launch(arrayOf(Manifest.permission.RECORD_AUDIO))
                 }
+                SwitchRow("2 つ同時で島が狭くなっても時間を出す（ストップウォッチ・タイマー・通話など）", settings.splitTime) { v -> update { it.copy(splitTime = v) } }
                 SwitchRow("全画面のアプリでは隠す", settings.hideFullscreen) { v -> update { it.copy(hideFullscreen = v) } }
                 SwitchRow("横向きでは隠す", settings.hideLandscape) { v -> update { it.copy(hideLandscape = v) } }
                 SwitchRow("通知シェードを開いたら隠す", settings.hideShade) { v -> update { it.copy(hideShade = v) } }

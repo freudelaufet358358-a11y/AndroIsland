@@ -102,27 +102,19 @@ fun CompactContent(a: IslandActivity, m: IslandMetrics) {
         } else {
             CompactRow(
                 m,
-                leading = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Glyph(if (a.video) IslandIcons.Video else IslandIcons.Phone, IslandColors.Green, g * 0.75f)
-                        if (a.chrono != null) {
-                            Spacer(Modifier.width(4.dp))
-                            ChronoText(a.chrono, IslandColors.Green) { TimeFormat.clock(it) }
-                        }
-                    }
-                },
+                leading = { CallLeading(a, g) },
                 trailing = { Waveform(IslandColors.Green, true, Modifier.size(g, g * 0.72f)) },
             )
         }
         is TimerActivity -> CompactRow(
             m,
             leading = { TimerRing(a, g) },
-            trailing = { ChronoText(a.chrono, IslandColors.Orange) { TimeFormat.countdown(it) } },
+            trailing = { TimerTime(a) },
         )
         is StopwatchActivity -> CompactRow(
             m,
             leading = { Glyph(IslandIcons.Stopwatch, IslandColors.Orange, g) },
-            trailing = { ChronoText(a.chrono, IslandColors.Orange, fine = true) { if (a.preciseFraction) TimeFormat.stopwatch(it) else TimeFormat.clock(it) } },
+            trailing = { StopwatchTime(a) },
         )
         is RingingActivity -> CompactRow(
             m,
@@ -138,10 +130,7 @@ fun CompactContent(a: IslandActivity, m: IslandMetrics) {
         )
         is LiveActivity -> CompactRow(
             m,
-            leading = {
-                if (a.kind == Kind.Recording) RecordingDot(readableColor(a.color).takeIf { a.color != 0 } ?: IslandColors.Red)
-                else LiveIcon(a, g * 0.85f)
-            },
+            leading = { LiveLeading(a, g) },
             trailing = { LiveTrailing(a, g) },
         )
         is ReferenceActivity -> {
@@ -166,15 +155,67 @@ fun MinimalContent(a: IslandActivity, m: IslandMetrics) {
     ) { MinimalGlyph(a, m.heightDp()) }
 }
 
-/** 主の島（右端をカメラ部分にそろえ、左へ少し伸びた形）。伸びた部分に小さな印を出す */
+/**
+ * 主の島（右端をカメラ部分にそろえ、左へ少し伸びた形）。伸びた部分に小さな印を出す。
+ * time なら印の右に時間も並べ（[showsTime] のもの）、島はその分だけ左へ伸びる（[IslandMetrics.splitLead]）
+ */
 @Composable
-fun MinimalAttachedContent(a: IslandActivity, m: IslandMetrics) {
-    val d = LocalDensity.current
-    val lead = with(d) { m.minimalLead.toDp() }
-    Box(Modifier.size(with(d) { (m.sensorWidth + m.minimalLead).toDp() }, m.heightDp())) {
-        Box(Modifier.size(lead + 4.dp, m.heightDp()).padding(start = 4.dp), contentAlignment = Alignment.Center) {
-            MinimalGlyph(a, minOf(lead, m.heightDp()))
+fun MinimalAttachedContent(a: IslandActivity, m: IslandMetrics, time: Boolean = false) {
+    if (time) {
+        val g = m.glyphDp()
+        Layout(content = { MarkAndTime(a, g) }) { measurables, _ ->
+            val p = measurables.map { it.measure(Constraints()) }
+            val content = p.maxOfOrNull { it.width } ?: 0
+            val pad = m.sidePad.roundToInt()
+            val h = m.height.roundToInt()
+            // 中身の右にカメラ部分をあける。島の形はこの幅に合わせる（IslandRoot の targetGeo）
+            val w = (m.splitLead(content.toFloat()) + m.sensorWidth).roundToInt()
+            layout(w, h) {
+                p.forEach { it.place(pad, (h - it.height) / 2) }
+            }
         }
+    } else {
+        val d = LocalDensity.current
+        val lead = with(d) { m.minimalLead.toDp() }
+        Box(Modifier.size(with(d) { (m.sensorWidth + m.minimalLead).toDp() }, m.heightDp())) {
+            Box(Modifier.size(lead + 4.dp, m.heightDp()).padding(start = 4.dp), contentAlignment = Alignment.Center) {
+                MinimalGlyph(a, minOf(lead, m.heightDp()))
+            }
+        }
+    }
+}
+
+/**
+ * コンパクトで時間（経過・残り）を出しているもの。2 つ同時で主の島が狭くなっているときも、
+ * 設定でオンなら印の右にこの時間を出す（iPhone は印だけ）
+ */
+fun IslandActivity.showsTime(): Boolean = when (this) {
+    is StopwatchActivity, is TimerActivity -> true
+    is CallActivity -> !incoming && chrono != null
+    // コンパクトの右側は短い文・進捗・時間の順に出すので、時間を出しているときだけ
+    is LiveActivity -> shortText.isNullOrBlank() && progress == null && !indeterminate && chrono != null
+    else -> false
+}
+
+/** 2 つ同時のとき主の島に出す、印と時間。どちらもコンパクトと同じもの（通話中はコンパクトの左側そのまま） */
+@Composable
+private fun MarkAndTime(a: IslandActivity, g: Dp) {
+    when (a) {
+        is CallActivity -> CallLeading(a, g)
+        is TimerActivity -> MarkWithTime({ TimerRing(a, g) }) { TimerTime(a) }
+        is StopwatchActivity -> MarkWithTime({ Glyph(IslandIcons.Stopwatch, IslandColors.Orange, g) }) { StopwatchTime(a) }
+        is LiveActivity -> MarkWithTime({ LiveLeading(a, g) }) { LiveTrailing(a, g) }
+        else -> Spacer(Modifier.size(1.dp))
+    }
+}
+
+/** 印の右に時間を並べる（通話中のコンパクトの左側と同じ間隔） */
+@Composable
+private fun MarkWithTime(mark: @Composable () -> Unit, time: @Composable () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        mark()
+        Spacer(Modifier.width(4.dp))
+        time()
     }
 }
 
@@ -211,6 +252,34 @@ fun ChronoText(
 ) {
     val v = chronoValue(chrono, fine)
     Text(format(v), style = style, color = color, maxLines = 1)
+}
+
+/** 通話中の緑の受話器と通話時間 */
+@Composable
+private fun CallLeading(a: CallActivity, g: Dp) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Glyph(if (a.video) IslandIcons.Video else IslandIcons.Phone, IslandColors.Green, g * 0.75f)
+        if (a.chrono != null) {
+            Spacer(Modifier.width(4.dp))
+            ChronoText(a.chrono, IslandColors.Green) { TimeFormat.clock(it) }
+        }
+    }
+}
+
+@Composable
+private fun TimerTime(a: TimerActivity) {
+    ChronoText(a.chrono, IslandColors.Orange) { TimeFormat.countdown(it) }
+}
+
+@Composable
+private fun StopwatchTime(a: StopwatchActivity) {
+    ChronoText(a.chrono, IslandColors.Orange, fine = true) { if (a.preciseFraction) TimeFormat.stopwatch(it) else TimeFormat.clock(it) }
+}
+
+@Composable
+private fun LiveLeading(a: LiveActivity, g: Dp) {
+    if (a.kind == Kind.Recording) RecordingDot(readableColor(a.color).takeIf { a.color != 0 } ?: IslandColors.Red)
+    else LiveIcon(a, g * 0.85f)
 }
 
 @Composable

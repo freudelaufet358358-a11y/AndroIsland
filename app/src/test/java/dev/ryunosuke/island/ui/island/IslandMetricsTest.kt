@@ -49,6 +49,15 @@ class IslandMetricsTest {
         assertEquals(m.holeRadius * 2 + m.sidePad + 2 * 300f, m.compactWidth(300f), 0.01f)
     }
 
+    @Test fun splitLeadFitsMarkAndTime() {
+        val m = metrics()
+        // 印と時間（ここでは 90dp）は、島の端からコンパクトと同じ余白をあけて置く
+        assertEquals(m.sidePad + 90f * d, m.splitLead(90f * d), 0.01f)
+        // 中身が狭くても印だけのとき（0.9H）より短くはしない
+        assertEquals(m.minimalLead, m.splitLead(0f), 0.01f)
+        assertEquals(m.height * 0.9f, m.splitLead(0f), 0.01f)
+    }
+
     @Test fun idleWidthEstimateMatchesMetrics() {
         assertEquals(metrics().sensorWidth / d, IslandMetrics.idleWidthDp(1080 / d, IslandSettings()), 0.5f)
         assertEquals(150f, IslandMetrics.idleWidthDp(1080 / d, IslandSettings(centerWidthDp = 150f)), 0.01f)

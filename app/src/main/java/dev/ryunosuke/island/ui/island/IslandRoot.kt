@@ -63,6 +63,7 @@ import dev.ryunosuke.island.ui.island.content.ContentActions
 import dev.ryunosuke.island.ui.island.content.ExpandedContent
 import dev.ryunosuke.island.ui.island.content.MinimalAttachedContent
 import dev.ryunosuke.island.ui.island.content.MinimalContent
+import dev.ryunosuke.island.ui.island.content.showsTime
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -108,9 +109,10 @@ private data object IdleSlot : Slot {
 /**
  * split = 2 つ同時。主はカメラ部分の左に小さな印だけを出し、右端をカメラ部分にそろえる
  * （iPhone の「minimal attached」）。2 つ目は右に離れた島に出る。
+ * time = 2 つ同時でも印の右に時間を出す（ストップウォッチなど。設定でオンのとき）。主の島はその分だけ左へ伸びる。
  */
-private data class CompactSlot(val a: IslandActivity, val split: Boolean) : Slot {
-    override val id get() = "c:${a.key}:${variantOf(a)}:${if (split) "split" else ""}"
+private data class CompactSlot(val a: IslandActivity, val split: Boolean, val time: Boolean = false) : Slot {
+    override val id get() = "c:${a.key}:${variantOf(a)}:${if (!split) "" else if (time) "split-time" else "split"}"
 }
 
 private data class ExpandedSlot(val a: IslandActivity) : Slot {
@@ -166,9 +168,14 @@ private fun targetGeo(slot: Slot, measured: IntSize?, m: IslandMetrics): Geo {
         }
         is CompactSlot -> if (slot.split) {
             split = true
-            // 中身の無い見本と比べるときは、見本と同じ 0.6H だけ伸ばす
-            val lead = if (slot.a is dev.ryunosuke.island.island.ReferenceActivity) h * 0.6f else m.minimalLead
-            l = m.cx - s / 2 - lead; r = m.cx + s / 2; t = m.top; b = t + h
+            // 中身の無い見本と比べるときは、見本と同じ 0.6H だけ伸ばす。時間も出すときは中身の実寸（カメラ部分を含む）まで
+            r = m.cx + s / 2
+            l = when {
+                slot.a is dev.ryunosuke.island.island.ReferenceActivity -> r - s - h * 0.6f
+                slot.time && measured != null -> r - measured.width
+                else -> r - s - m.minimalLead
+            }
+            t = m.top; b = t + h
         } else {
             val w = maxOf(measured?.width?.toFloat() ?: (s + 2 * (m.sidePad + 0.6f * h)), s)
             l = m.cx - w / 2; r = m.cx + w / 2; t = m.top; b = t + h
@@ -428,6 +435,8 @@ fun IslandRoot(
     metrics: IslandMetrics,
     callbacks: IslandCallbacks,
     animationSpeed: Float = 1f,
+    /** 2 つ同時で主の島が狭くなっても、ストップウォッチなどの時間を出す（設定） */
+    splitTime: Boolean = true,
 ) {
     val im = remember(animationSpeed) { IslandMotion(animationSpeed) }
     val slot: Slot = when {
@@ -436,7 +445,10 @@ fun IslandRoot(
         // スワイプでしまったものがあるときは、設定で待機時の島を消していても島を残す（iPhone と同じく、そこから戻せる）
         presentation.primary == null -> if (idleVisible || presentation.hidden > 0) IdleSlot else HiddenSlot
         presentation.expanded -> ExpandedSlot(presentation.primary)
-        else -> CompactSlot(presentation.primary, split = presentation.secondary != null)
+        else -> {
+            val split = presentation.secondary != null
+            CompactSlot(presentation.primary, split, time = split && splitTime && presentation.primary.showsTime())
+        }
     }
     val bubbleActivity = if (slot is CompactSlot && slot.split) presentation.secondary else null
 
@@ -456,7 +468,7 @@ fun IslandRoot(
         }
         // 中身の大きさで形が決まる状態は、実寸が測れるまで 1 コマ待ってから動き出す
         // （見積もりで動き出して次のコマで目標が変わると、軌道に折れ目が入る）
-        val needsMeasure = slot is AlertSlot || slot is ExpandedSlot || (slot is CompactSlot && !slot.split)
+        val needsMeasure = slot is AlertSlot || slot is ExpandedSlot || (slot is CompactSlot && (!slot.split || slot.time))
         if (needsMeasure && sizes[slot.id] == null) return@LaunchedEffect
         // 同じ状態のまま目標だけ変わる（中身の実寸が 1 コマ遅れて届くなど）ときは、その遷移のバネを使い続ける。
         // ここでコンパクト用のバネに切り替えると、展開の途中で動きが変わる
@@ -464,6 +476,9 @@ fun IslandRoot(
             ?: motionFor(previous.value, slot, im).also { lastMotion.value = it }
         previous.value = slot
         anim.animateTo(target, motion, im)
+        // 2 つ同時になるときに左端が大きく弾むのは分かれる一度だけ。落ち着いたあと時間の桁が変わるなどで
+        // 主の島が伸び縮みするときは、コンパクトと同じく弾ませない
+        if (slot is CompactSlot && slot.split) lastMotion.value = Motion(im.toCompactWidth, im.toCompactHeight)
     }
 
     // 触れる範囲を窓に伝える。島の外は下のアプリに素通しする。
@@ -603,7 +618,7 @@ fun IslandRoot(
                     ) {
                         when (s) {
                             HiddenSlot, IdleSlot -> Spacer(Modifier.size(1.dp))
-                            is CompactSlot -> if (s.split) MinimalAttachedContent(s.a, metrics) else CompactContent(s.a, metrics)
+                            is CompactSlot -> if (s.split) MinimalAttachedContent(s.a, metrics, s.time) else CompactContent(s.a, metrics)
                             is AlertSlot -> AlertContent(s.alert, metrics)
                             is ExpandedSlot -> ExpandedContent(s.a, metrics, act)
                         }

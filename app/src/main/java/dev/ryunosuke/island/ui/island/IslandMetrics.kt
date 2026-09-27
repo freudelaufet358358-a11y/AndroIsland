@@ -61,6 +61,12 @@ data class IslandMetrics(
         return maxOf(fixedCompactWidth, sensorWidth, holeRadius * 2 + sidePad + 2 * edge)
     }
 
+    /**
+     * 2 つ同時のとき、主の島がカメラ部分から左へ伸びる長さ。[content] は伸びた部分に置く中身（印と時間）の幅。
+     * 中身は島の端からコンパクトと同じ余白をあけて置き、カメラ部分の手前まで使う。印だけのときより短くはしない
+     */
+    fun splitLead(content: Float): Float = maxOf(minimalLead, sidePad + content)
+
     companion object {
         /** iPhone の島の高さ 37.33pt ÷ 画面幅 393pt */
         const val HEIGHT_PER_WIDTH = 37.33f / 393f

@@ -95,6 +95,7 @@ class OverlayHost(
                         metrics = metrics,
                         callbacks = callbacks,
                         animationSpeed = settings.animationSpeed,
+                        splitTime = settings.splitTime,
                     )
                 }
             }
