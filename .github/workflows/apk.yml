@@ -29,8 +29,11 @@ jobs:
           distribution: temurin
           java-version: 21
 
-      # SDK のライセンスに同意しておく（足りない platform・build-tools は AGP が自分で落とす）
+      # SDK のライセンスに同意しておく（足りない platform・build-tools は AGP が自分で落とす）。
+      # 既定で入れようとする古い "tools" パッケージはもう無いので、platform-tools だけにする
       - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
 
       - uses: gradle/actions/setup-gradle@v4
 
