@@ -12,6 +12,7 @@ import dev.ryunosuke.island.source.BatterySaver
 import dev.ryunosuke.island.source.MediaSource
 import dev.ryunosuke.island.source.NotificationRepo
 import dev.ryunosuke.island.source.RecentsWatcher
+import dev.ryunosuke.island.source.StatusBarGap
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -40,6 +41,9 @@ class Graph(app: Application) {
     val media = MediaSource(app, scope, settings, dismissedByRecents = recents::isOpenOrJustClosed)
     val clock = ClockEngine(app)
     val spectrum = AudioSpectrum(app)
+
+    /** ステータスバーの真ん中を島の幅だけ空ける（root の Shizuku。島の窓の寸法は IslandOverlayService が入れる） */
+    val statusBarGap = StatusBarGap(app, scope, settings)
 
     /** 省電力（バッテリー セーバー）が入っているか。電池残量低下の表示がこの値で色を変える */
     val batterySaverOn = kotlinx.coroutines.flow.MutableStateFlow(BatterySaver.isOn(app))

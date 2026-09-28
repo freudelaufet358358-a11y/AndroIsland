@@ -2,6 +2,7 @@ package dev.ryunosuke.island.ui.island
 
 import dev.ryunosuke.island.data.IslandSettings
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class IslandMetricsTest {
@@ -47,6 +48,34 @@ class IslandMetricsTest {
         assertEquals(m.sensorWidth, m.compactWidth(80f), 0.01f)
         // 中身が広いときは、カメラ穴と余白 1 つ分の間を残して広がる
         assertEquals(m.holeRadius * 2 + m.sidePad + 2 * 300f, m.compactWidth(300f), 0.01f)
+    }
+
+    @Test fun statusBarGapFitsCompactAndSplitIslands() {
+        val m = metrics()
+        val half = m.statusBarGapHalf(0f, 0f)
+        // コンパクト（左右に絵）より、2 つ同時の右に離れた島の方が外に出る。そこから隙間 1 つ分あける
+        val right = m.sensorWidth / 2 + m.detachedGap + m.detachedWidth
+        assertTrue(right > m.compactWidth(m.glyph + m.sidePad) / 2)
+        assertEquals(right + m.detachedGap, half, 0.01f)
+        // Pixel 6a では約 255dp（両脇に 78dp ずつ残る）
+        assertEquals(255f, 2 * half / d, 1f)
+    }
+
+    @Test fun statusBarGapFollowsFixedCompactWidthAndOffset() {
+        // コンパクトを広くすれば、それが入る幅
+        val wide = metrics(IslandSettings(compactWidthDp = 280f))
+        assertEquals(280f * d / 2 + wide.detachedGap, wide.statusBarGapHalf(0f, 0f), 0.5f)
+        // 島を右にずらすと、空き（画面の中央に置かれる）もその分広がる
+        val shifted = metrics(IslandSettings(offsetXDp = 10f))
+        assertEquals(metrics().statusBarGapHalf(0f, 0f) + 10f * d, shifted.statusBarGapHalf(0f, 0f), 0.5f)
+    }
+
+    @Test fun statusBarGapSettingIsClampedToCameraAndScreen() {
+        val m = metrics()
+        assertEquals(200f * d / 2, m.statusBarGapHalf(200f, 0f), 0.01f)
+        // カメラ穴は必ず覆い、両脇に画面幅の 1/8 は残す
+        assertEquals(100f, m.statusBarGapHalf(50f, 100f), 0.01f)
+        assertEquals(1080f * 3 / 8, m.statusBarGapHalf(1000f, 0f), 0.01f)
     }
 
     @Test fun idleWidthEstimateMatchesMetrics() {

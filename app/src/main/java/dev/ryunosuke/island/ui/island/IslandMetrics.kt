@@ -49,6 +49,9 @@ data class IslandMetrics(
     val top get() = cy - height / 2
     val expandedWidth get() = width - margin * 2
 
+    /** コンパクト時の小さな絵（ジャケット・アイコン・波形）の大きさ。HIG の寸法図では中身の高さが 0.53H */
+    val glyph get() = (height * 0.55f).coerceIn(16 * density, 26 * density)
+
     fun dp(px: Float) = px / density
 
     /**
@@ -59,6 +62,28 @@ data class IslandMetrics(
     fun compactWidth(edge: Float): Float {
         if (fixedCompactWidth <= 0f) return sensorWidth + 2 * edge
         return maxOf(fixedCompactWidth, sensorWidth, holeRadius * 2 + sidePad + 2 * edge)
+    }
+
+    /**
+     * ステータスバーの真ん中に空ける幅の半分（画面の中央から片側）。
+     * [gapDp] が 0（自動）なら、島が待機・コンパクト（左右に絵を置いた形。音楽など）・2 つ同時のどの形でも入り、
+     * 島の端とアイコンの間に [detachedGap] だけ隙間が残る幅。ステータスバーは空きを画面の中央に置くので、
+     * 島を左右にずらしていればその分も広げる。展開した島は覆ってしまうので見ない。
+     * どちらでも、カメラ穴（中央から [holeHalf] まで）は覆い、両脇に画面幅の 1/8 ずつは残す
+     * （空きが画面の端に届くと、システムがカメラ穴を角にあるものとみなし、真ん中を空けなくなる）
+     */
+    fun statusBarGapHalf(gapDp: Float, holeHalf: Float): Float {
+        val half = if (gapDp > 0f) {
+            gapDp * density / 2
+        } else {
+            val compact = compactWidth(glyph + sidePad) / 2
+            // 2 つ同時: 主は右端をカメラ部分にそろえて左へ伸び、右に離れた島が出る
+            val left = maxOf(compact, sensorWidth / 2 + minimalLead)
+            val right = maxOf(compact, sensorWidth / 2 + detachedGap + detachedWidth)
+            val center = width / 2
+            maxOf(cx + right - center, center - (cx - left)) + detachedGap
+        }
+        return half.coerceAtLeast(holeHalf).coerceAtMost(width * 3 / 8)
     }
 
     companion object {

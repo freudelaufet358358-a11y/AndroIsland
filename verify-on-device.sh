@@ -330,6 +330,23 @@ else
 fi
 cmd clear
 
+# 切り替えると開いているアプリの画面が全部作り直されるので、スクリプトからはオン・オフしない（設定でオンのときに確かめるだけ）
+echo "== ステータスバーの空き（設定でオンのときだけ。root の Shizuku が要る） =="
+require_device
+A logcat -c >/dev/null
+cmd statusbar; sleep 0.5
+sb=$(A logcat -d -s IslandShell:I | grep -o 'statusbar=.*' | tail -1)
+case "$sb" in
+  ""|*"on=false"*) info "飛ばす（${sb:-応答なし}）" ;;
+  statusbar=Applied*)
+    pass "ステータスバーの真ん中を空けている（${sb#statusbar=}）"
+    cmd demo Media; sleep 1.2
+    shot "statusbar-gap"
+    cmd clear ;;
+  statusbar=Failed*) fail "ステータスバーを空けられない — $sb" ;;
+  *) info "まだ空けていない（$sb）" ;;
+esac
+
 echo "== 滑らかさ =="
 require_device
 cmd demo Media; sleep 1

@@ -76,9 +76,9 @@ fun IslandMetrics.heightDp(): Dp = with(LocalDensity.current) { height.toDp() }
 @Composable
 fun IslandMetrics.expandedWidthDp(): Dp = with(LocalDensity.current) { expandedWidth.toDp() }
 
-/** コンパクト時の小さな絵の大きさ。HIG の寸法図では中身の高さが 0.53H */
+/** コンパクト時の小さな絵の大きさ（[IslandMetrics.glyph]。ステータスバーの空きもこの大きさで見積もる） */
 @Composable
-fun IslandMetrics.glyphDp(): Dp = (heightDp() * 0.55f).coerceIn(16.dp, 26.dp)
+fun IslandMetrics.glyphDp(): Dp = with(LocalDensity.current) { glyph.toDp() }
 
 // ---- コンパクト ----
 

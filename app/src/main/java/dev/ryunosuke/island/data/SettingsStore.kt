@@ -49,6 +49,10 @@ data class IslandSettings(
     val expandedWidthDp: Float = 0f,
     val offsetXDp: Float = 0f,
     val offsetYDp: Float = 0f,
+    /** ステータスバーの時計とアイコンを島の外に出す（root で起動した Shizuku が要る。StatusBarGap） */
+    val shiftStatusBar: Boolean = false,
+    /** そのときステータスバーの真ん中に空ける幅。0 は自動（島がコンパクトと 2 つ同時で入る幅） */
+    val statusBarGapDp: Float = 0f,
     val excludedPackages: Set<String> = emptySet(),
 )
 
@@ -82,6 +86,8 @@ class SettingsStore(private val context: Context, scope: CoroutineScope) {
         val expandedWidthDp = floatPreferencesKey("expanded_width_dp")
         val offsetXDp = floatPreferencesKey("offset_x_dp")
         val offsetYDp = floatPreferencesKey("offset_y_dp")
+        val shiftStatusBar = booleanPreferencesKey("shift_status_bar")
+        val statusBarGapDp = floatPreferencesKey("status_bar_gap_dp")
         val excluded = stringSetPreferencesKey("excluded_packages")
     }
 
@@ -117,6 +123,8 @@ class SettingsStore(private val context: Context, scope: CoroutineScope) {
             p[K.expandedWidthDp] = s.expandedWidthDp
             p[K.offsetXDp] = s.offsetXDp
             p[K.offsetYDp] = s.offsetYDp
+            p[K.shiftStatusBar] = s.shiftStatusBar
+            p[K.statusBarGapDp] = s.statusBarGapDp
             p[K.excluded] = s.excludedPackages
         }
     }
@@ -149,6 +157,8 @@ class SettingsStore(private val context: Context, scope: CoroutineScope) {
             expandedWidthDp = this[K.expandedWidthDp] ?: d.expandedWidthDp,
             offsetXDp = this[K.offsetXDp] ?: d.offsetXDp,
             offsetYDp = this[K.offsetYDp] ?: d.offsetYDp,
+            shiftStatusBar = this[K.shiftStatusBar] ?: d.shiftStatusBar,
+            statusBarGapDp = this[K.statusBarGapDp] ?: d.statusBarGapDp,
             excludedPackages = this[K.excluded] ?: d.excludedPackages,
         )
     }

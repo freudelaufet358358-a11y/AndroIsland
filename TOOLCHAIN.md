@@ -26,4 +26,5 @@ vocab-android と同じ組み合わせ（詳細と踏んだ制約は `~/ClaudeCo
   minSdk 34 のまま参照すると lint が怒る。値は変わらないので直書きしている
 - **Shizuku は `dev.rikka.shizuku:api` / `provider` 13.1.5 と HiddenApiBypass だけ。** 隠し API のスタブ（`dev.rikka.hidden`）や
   refine のプラグインは入れない。呼ぶ隠し API は `IActivityTaskManager#getRecentTasks` の 1 つなのでリフレクションで足り、
-  それ以外（省電力・許可の付与）は adb と同じコマンドを Shizuku 側で動かす
+  それ以外（省電力・許可の付与・ステータスバーの空き）は adb と同じコマンドを Shizuku 側で動かす
+  （ステータスバーの空きに使う `cmd overlay fabricate` だけは root でないと通らない）

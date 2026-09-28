@@ -8,12 +8,14 @@ import android.graphics.Canvas
 import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Shader
+import android.hardware.display.DisplayManager
 import android.media.AudioManager
 import android.media.MediaMetadata
 import android.media.session.MediaSession
 import android.media.session.PlaybackState
 import android.os.SystemClock
 import android.util.Log
+import android.view.Display
 import dev.ryunosuke.island.IslandApp
 import dev.ryunosuke.island.island.CallActivity
 import dev.ryunosuke.island.island.DemoController
@@ -33,7 +35,8 @@ import kotlinx.coroutines.launch
  *      expand / collapse / media start|stop / state / idle on|off / refonly on|off / refseq / refseq26 /
  *      tone <Hz> <秒>（ごく小さな音を鳴らし、波形の解析結果をログに出す） /
  *      playraw <名前>（アプリ専用フォルダの 48kHz・モノラル・16bit の生データを、試験用の MediaSession を立てて鳴らす） /
- *      shizuku（Shizuku の状態と、Shizuku で読んだ最近のタスクのアプリを "shizuku=…" の 1 行でログに出す）
+ *      shizuku（Shizuku の状態と、Shizuku で読んだ最近のタスクのアプリを "shizuku=…" の 1 行でログに出す） /
+ *      statusbar（ステータスバーの空きの状態と、端末が今報告しているカメラ穴の上端の矩形を "statusbar=…" の 1 行でログに出す）
  */
 class ShellCommandReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -66,6 +69,11 @@ class ShellCommandReceiver : BroadcastReceiver() {
                     } else "-"
                     Log.i(TAG, "shizuku=${ShizukuShell.status(app)} uid=${ShizukuShell.uid()} tasks=$tasks")
                 }
+            }
+            "statusbar" -> {
+                val rect = context.getSystemService(DisplayManager::class.java).getDisplay(Display.DEFAULT_DISPLAY)
+                    ?.cutout?.boundingRectTop?.toShortString()
+                Log.i(TAG, "statusbar=${g.statusBarGap.state.value} on=${g.settings.value.shiftStatusBar} cutout=$rect")
             }
         }
         Log.i(TAG, "cmd=${args.joinToString(" ")} state=${describe()}")

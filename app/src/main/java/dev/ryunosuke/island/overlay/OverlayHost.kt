@@ -45,6 +45,9 @@ class OverlayHost(
     private val wm = context.getSystemService(WindowManager::class.java)
     private val lifecycle = OverlayLifecycleOwner()
     private val hostInfo = MutableStateFlow(HostInfo(density = context.resources.displayMetrics.density))
+
+    /** 窓から見た画面（幅・カメラ穴・ステータスバーの高さ）。窓の幅が分かるまでは widthPx = 0 */
+    val info: StateFlow<HostInfo> get() = hostInfo
     private var root: TouchHost? = null
 
     /**

@@ -75,6 +75,7 @@ import dev.ryunosuke.island.overlay.IslandOverlayService
 import dev.ryunosuke.island.source.BatterySaver
 import dev.ryunosuke.island.source.IslandNotificationListener
 import dev.ryunosuke.island.source.ShizukuShell
+import dev.ryunosuke.island.source.StatusBarGap
 import dev.ryunosuke.island.ui.island.IslandColors
 import dev.ryunosuke.island.ui.island.IslandMetrics
 import dev.ryunosuke.island.ui.island.IslandText
@@ -136,6 +137,8 @@ private fun MainScreen() {
     val permissions = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         access = readAccess(context)
     }
+    // 縦向きの画面の幅（島は横向きでは隠す）
+    val screenDp = context.resources.displayMetrics.let { minOf(it.widthPixels, it.heightPixels) / it.density }
 
     LazyColumn(
         Modifier.fillMaxSize().background(Color.Black).safeDrawingPadding(),
@@ -218,8 +221,6 @@ private fun MainScreen() {
                         "広がったときの幅は待機時の幅より狭くならず、中身がカメラの穴に被らない幅は残します。",
                     color = IslandColors.Secondary, fontSize = 13.sp,
                 )
-                // 縦向きの画面の幅（島は横向きでは隠す）
-                val screenDp = context.resources.displayMetrics.let { minOf(it.widthPixels, it.heightPixels) / it.density }
                 SliderRow("高さ", settings.heightDp, 0f..56f, "dp") { v -> update { it.copy(heightDp = v) } }
                 SliderRow("待機時の幅", settings.centerWidthDp, 0f..200f, "dp") { v -> update { it.copy(centerWidthDp = v) } }
                 AutoSizeRow(
@@ -242,6 +243,37 @@ private fun MainScreen() {
                         )
                     }
                 }) { Text("自動に戻す") }
+            }
+        }
+
+        item {
+            Section("ステータスバー（root）") {
+                val gap by g.statusBarGap.state.collectAsState()
+                Text(
+                    "root で起動した Shizuku があれば、ステータスバーの時計と通知アイコンを島の左、電池などを島の右に寄せて、" +
+                        "島の下に隠れないようにできます（展開したときは隠れます）。" +
+                        "切り替えたり幅を変えたりすると、開いているアプリの画面が一度作り直されます。",
+                    color = IslandColors.Secondary, fontSize = 13.sp,
+                )
+                SwitchRow("時計とアイコンを島の外に出す", settings.shiftStatusBar) { v -> update { it.copy(shiftStatusBar = v) } }
+                if (settings.shiftStatusBar) {
+                    // 変えるたびにアプリの画面が作り直されるので、指を離したときだけ変える
+                    AutoSizeRow(
+                        "空ける幅",
+                        settings.statusBarGapDp,
+                        IslandMetrics.idleWidthDp(screenDp, settings).coerceAtMost(screenDp * 0.75f - 1f)..screenDp * 0.75f,
+                        commitOnRelease = true,
+                    ) { v -> update { it.copy(statusBarGapDp = v) } }
+                }
+                statusBarGapText(gap, settings.shiftStatusBar)?.let {
+                    Text(it, color = Color.White, fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp))
+                }
+                if (settings.shiftStatusBar) {
+                    Text(
+                        "アンインストールする前にスイッチを切ってください（切らずに消したときは、入れ直して Shizuku の使用を許可すると元に戻ります）。",
+                        color = IslandColors.Secondary, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp),
+                    )
+                }
             }
         }
 
@@ -494,14 +526,22 @@ private fun SliderRow(title: String, value: Float, range: ClosedFloatingPointRan
 
 /**
  * 0 を「自動」とする大きさのスライダー。左端のひと区切りが自動で、そのすぐ右から [range] の dp になる
- * （下限より小さい値は意味がないので、0〜下限をスライダーに入れない）
+ * （下限より小さい値は意味がないので、0〜下限をスライダーに入れない）。
+ * [commitOnRelease] なら、動かしている間は表示だけ変えて、指を離したときに [onChange] を呼ぶ
  */
 @Composable
-private fun AutoSizeRow(title: String, value: Float, range: ClosedFloatingPointRange<Float>, onChange: (Float) -> Unit) {
+private fun AutoSizeRow(
+    title: String,
+    value: Float,
+    range: ClosedFloatingPointRange<Float>,
+    commitOnRelease: Boolean = false,
+    onChange: (Float) -> Unit,
+) {
     val auto = range.start - (range.endInclusive - range.start) * 0.08f
     var local by remember(value, range) {
         androidx.compose.runtime.mutableFloatStateOf(if (value <= 0f) auto else value.coerceIn(range))
     }
+    fun valueOf(v: Float) = if (v < range.start) 0f else v.roundToInt().toFloat()
     Column(Modifier.padding(top = 6.dp)) {
         Row {
             Text(title, color = Color.White, fontSize = 15.sp, modifier = Modifier.weight(1f))
@@ -511,11 +551,25 @@ private fun AutoSizeRow(title: String, value: Float, range: ClosedFloatingPointR
             value = local,
             onValueChange = {
                 local = it
-                onChange(if (it < range.start) 0f else it.roundToInt().toFloat())
+                if (!commitOnRelease) onChange(valueOf(it))
             },
+            onValueChangeFinished = { if (commitOnRelease) onChange(valueOf(local)) },
             valueRange = auto..range.endInclusive,
         )
     }
+}
+
+/** ステータスバーの空きの今の状態。言うことが無ければ null */
+private fun statusBarGapText(state: StatusBarGap.State, on: Boolean): String? = when (state) {
+    StatusBarGap.State.Off -> if (on) "準備しています…" else null
+    StatusBarGap.State.NoIsland -> "アクセシビリティの Island がオンで、画面が縦向きのときに空けます"
+    StatusBarGap.State.NoShizuku -> "上の Shizuku が動いていて、Island に使う許可が出ているときに空けます"
+    StatusBarGap.State.NeedsRoot ->
+        "Shizuku が root なし（ワイヤレスデバッグ）で動いています。Shizuku のアプリで、root で起動し直してください"
+    StatusBarGap.State.Applying -> "空けています…"
+    is StatusBarGap.State.Applied -> "真ん中を ${state.widthDp} dp 空けています"
+    is StatusBarGap.State.Failed -> "空けられませんでした（${state.reason}）。スイッチを入れ直すと、もう一度試します"
+    StatusBarGap.State.CannotRestore -> "Shizuku が動いていないので、まだ元に戻せていません（Shizuku を起動すると戻します）"
 }
 
 /** 島の動きの速さ。1.0 が iOS 26 と同じ */

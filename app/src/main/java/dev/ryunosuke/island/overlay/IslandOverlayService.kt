@@ -59,7 +59,7 @@ class IslandOverlayService : AccessibilityService() {
         events = SystemEventSource(this, g.settings, onBatterySaverChanged = ::onBatterySaverChanged) { g.arbiter.postAlert(it) }
             .also { it.start() }
         onBatterySaverChanged(BatterySaver.isOn(this))
-        host = OverlayHost(
+        val h = OverlayHost(
             this, g, visible,
             onStatusBarsVisible = { shown ->
                 // 島の窓はステータスバーより上にあるので、insets が届かない端末もある。
@@ -74,6 +74,9 @@ class IslandOverlayService : AccessibilityService() {
                 Log.d(TAG, "島を下へスワイプ → 通知シェード ok=$ok")
             },
         ).also { it.attach() }
+        host = h
+        // ステータスバーに空ける幅は島の寸法から決める
+        s.launch { h.info.collect { i -> g.statusBarGap.host.value = i.takeIf { it.widthPx > 0 } } }
         s.launch {
             combine(g.settings, chrome) { st, c ->
                 // 窓の一覧で判定できるならそれを、できなければ insets を使う。どちらも使えなければ隠さない
@@ -132,6 +135,7 @@ class IslandOverlayService : AccessibilityService() {
         events = null
         scope?.cancel()
         scope = null
+        g.statusBarGap.host.value = null
     }
 
     private fun isLandscape(c: Configuration) = c.orientation == Configuration.ORIENTATION_LANDSCAPE

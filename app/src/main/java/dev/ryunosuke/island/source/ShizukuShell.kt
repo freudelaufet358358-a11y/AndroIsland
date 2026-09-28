@@ -9,6 +9,9 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.os.IBinder
 import android.util.Log
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
 import org.lsposed.hiddenapibypass.HiddenApiBypass
 import rikka.shizuku.Shizuku
 import rikka.shizuku.ShizukuBinderWrapper
@@ -22,6 +25,7 @@ import java.lang.reflect.Method
  *   付けたものは端末の設定として残るので、あとで Shizuku が止まっても消えない
  * - 省電力を `cmd power set-mode` で直接入れ・切りする（設定画面で手動で入れたものも切れる）
  * - 最近のタスクの一覧を読む（Recents で払われたアプリを突き止める）
+ * - root で動いているときだけ、ステータスバーの真ん中を島の幅だけ空ける（[StatusBarGap]）
  *
  * root なしの Shizuku は端末を再起動すると止まる。呼ぶ側は毎回 [isReady] を確かめ、使えなければ今までのやり方に戻す。
  * Shizuku の呼び出しはどれもプロセスをまたぐので、[handler] のスレッドで行う。
@@ -53,8 +57,16 @@ object ShizukuShell {
     @Volatile
     private var onGranted: (() -> Unit)? = null
 
+    private val _changes = MutableStateFlow(0)
+
+    /** Shizuku が動き出した・止まった・使用の許可が決まったときに 1 つ増える（使えるかを見直すきっかけ） */
+    val changes: StateFlow<Int> get() = _changes
+
     init {
+        Shizuku.addBinderReceivedListenerSticky { _changes.update { it + 1 } }
+        Shizuku.addBinderDeadListener { _changes.update { it + 1 } }
         Shizuku.addRequestPermissionResultListener { code, result ->
+            _changes.update { it + 1 }
             if (code != REQUEST_CODE) return@addRequestPermissionResultListener
             val action = onGranted
             onGranted = null
@@ -77,6 +89,9 @@ object ShizukuShell {
 
     /** shell の uid（adb なら 2000、root で起動していれば 0）。使えなければ -1 */
     fun uid(): Int = runCatching { Shizuku.getUid() }.getOrDefault(-1)
+
+    /** root で動いている（adb の shell には許されていないこともできる） */
+    fun isRoot(): Boolean = isReady() && uid() == 0
 
     /**
      * Island に Shizuku を使う許可を求め、許可されたら [then] を [handler] のスレッドで呼ぶ。
