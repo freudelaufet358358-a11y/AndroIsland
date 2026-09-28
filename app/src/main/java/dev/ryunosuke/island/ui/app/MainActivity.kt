@@ -264,6 +264,11 @@ private fun MainScreen() {
                         IslandMetrics.idleWidthDp(screenDp, settings).coerceAtMost(screenDp * 0.75f - 1f)..screenDp * 0.75f,
                         commitOnRelease = true,
                     ) { v -> update { it.copy(statusBarGapDp = v) } }
+                    Text(
+                        "自動は、音楽などのコンパクトがちょうど入る幅です（島の幅を変えると空きも合わせて変わります）。" +
+                            "2 つ同時の右の丸や、タイマーのように文字の多いものは、右のアイコンに少し被ります。",
+                        color = IslandColors.Secondary, fontSize = 12.sp,
+                    )
                 }
                 statusBarGapText(gap, settings.shiftStatusBar)?.let {
                     Text(it, color = Color.White, fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp))

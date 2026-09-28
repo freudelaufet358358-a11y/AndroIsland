@@ -50,15 +50,23 @@ class IslandMetricsTest {
         assertEquals(m.holeRadius * 2 + m.sidePad + 2 * 300f, m.compactWidth(300f), 0.01f)
     }
 
-    @Test fun statusBarGapFitsCompactAndSplitIslands() {
+    @Test fun statusBarGapHugsCompactIsland() {
         val m = metrics()
-        val half = m.statusBarGapHalf(0f, 0f)
-        // コンパクト（左右に絵）より、2 つ同時の右に離れた島の方が外に出る。そこから隙間 1 つ分あける
-        val right = m.sensorWidth / 2 + m.detachedGap + m.detachedWidth
-        assertTrue(right > m.compactWidth(m.glyph + m.sidePad) / 2)
-        assertEquals(right + m.detachedGap, half, 0.01f)
-        // Pixel 6a では約 255dp（両脇に 78dp ずつ残る）
-        assertEquals(255f, 2 * half / d, 1f)
+        // コンパクト（左右に絵。音楽など）がちょうど入り、両端に隙間 1 つ分
+        assertEquals(m.compactWidth(m.glyph + m.sidePad) / 2 + m.detachedGap, m.statusBarGapHalf(0f, 0f), 0.01f)
+        // Pixel 6a の既定の大きさでは約 221dp（両脇に 95dp ずつ残る）
+        assertEquals(221f, 2 * m.statusBarGapHalf(0f, 0f) / d, 1f)
+    }
+
+    @Test fun statusBarGapShrinksWithShortIsland() {
+        // 待機時の幅を 47dp に縮めると、音楽のコンパクトは約 121dp。空きもそれに隙間 2 つ分を足しただけ
+        // （前は 2 つ同時の右の丸まで入れていたので 171dp 空き、島の両脇に 25dp ずつ余っていた）
+        val m = metrics(IslandSettings(centerWidthDp = 47f))
+        val compact = m.compactWidth(m.glyph + m.sidePad)
+        assertEquals(121f, compact / d, 1f)
+        assertEquals(compact / 2 + m.detachedGap, m.statusBarGapHalf(0f, 0f), 0.01f)
+        assertEquals(136f, 2 * m.statusBarGapHalf(0f, 0f) / d, 1f)
+        assertTrue(m.statusBarGapHalf(0f, 0f) < metrics().statusBarGapHalf(0f, 0f))
     }
 
     @Test fun statusBarGapFollowsFixedCompactWidthAndOffset() {
