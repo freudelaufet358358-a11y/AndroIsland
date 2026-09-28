@@ -10,6 +10,7 @@ import androidx.core.content.edit
 import dev.ryunosuke.island.data.IslandSettings
 import dev.ryunosuke.island.ui.island.HostInfo
 import dev.ryunosuke.island.ui.island.IslandMetrics
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.android.asCoroutineDispatcher
 import kotlinx.coroutines.delay
@@ -82,7 +83,14 @@ class StatusBarGap(private val app: Context, scope: CoroutineScope, settings: St
                 // スライダーを動かしている間は待つ（作り直すたびに、開いているアプリの画面が作り直される）
                 .collectLatest { (s, h) ->
                     delay(SETTLE_MS)
-                    update(s, h)
+                    try {
+                        update(s, h)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Log.w(TAG, "ステータスバーの空きを見直せない", e)
+                        _state.value = State.Failed(e.message ?: e.javaClass.simpleName)
+                    }
                 }
         }
     }
@@ -131,6 +139,11 @@ class StatusBarGap(private val app: Context, scope: CoroutineScope, settings: St
         }
         if (prefs.getString(KEY_FAILED_SPEC, null) == want.spec) {
             _state.value = State.Failed(prefs.getString(KEY_FAILED_REASON, null).orEmpty())
+            return
+        }
+        // この値はシステムの中（system_server）で読まれ、読めない値だと端末ごと起動できなくなる。決まった形のものしか送らない
+        if (!want.isWellFormed()) {
+            _state.value = State.Failed("空ける矩形を決められない（${want.spec}）")
             return
         }
 
@@ -225,7 +238,12 @@ class StatusBarGap(private val app: Context, scope: CoroutineScope, settings: St
         /** 端末が今報告している上端の矩形の幅と下端が、これと同じか（丸めの分だけずれてよい） */
         fun matches(width: Int, bottom: Int) = abs(width - widthPx) <= TOLERANCE_PX && abs(bottom - this.bottom) <= TOLERANCE_PX
 
+        /** 中身のある矩形で、[spec] が「M -整数,0 H 整数 V 整数 H -整数 Z」の形になっている */
+        fun isWellFormed() = halfPx > 0 && bottomPx > 0 && WELL_FORMED.matches(spec)
+
         companion object {
+            private val WELL_FORMED = Regex("""M -\d+,0 H \d+ V \d+ H -\d+ Z""")
+
             /** [bottom] は今の矩形の下端（高さは変えない）、[physicalWidth] は設定値の画素での画面の幅 */
             fun of(m: IslandMetrics, holeHalf: Float, gapDp: Float, bottom: Int, physicalWidth: Int): Gap {
                 val ratio = if (m.width > 0f) physicalWidth / m.width else 1f

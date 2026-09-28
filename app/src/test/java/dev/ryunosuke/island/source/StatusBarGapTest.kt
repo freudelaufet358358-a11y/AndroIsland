@@ -19,6 +19,13 @@ class StatusBarGapTest {
         assertEquals("M -263,0 H 263 V 132 H -263 Z", gap.spec)
         assertEquals(526f, gap.widthPx, 0.01f)
         assertEquals(200, gap.widthDp)
+        assertTrue(gap.isWellFormed())
+    }
+
+    @Test fun emptyRectangleIsNeverSent() {
+        // システムの中で読まれる値なので、中身の無い矩形は送らない
+        assertFalse(StatusBarGap.Gap(0, 132, 1f, d).isWellFormed())
+        assertFalse(StatusBarGap.Gap(263, 0, 1f, d).isWellFormed())
     }
 
     @Test fun matchesOnlyTheReportedGap() {
