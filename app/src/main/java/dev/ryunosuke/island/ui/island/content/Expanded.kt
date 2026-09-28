@@ -15,9 +15,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -34,6 +36,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -42,6 +45,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -68,26 +72,89 @@ import kotlinx.coroutines.delay
 @Composable
 fun ExpandedContent(a: IslandActivity, m: IslandMetrics, act: ContentActions) {
     val w = m.expandedWidthDp()
+    val zone = m.cameraZone()
     Box(Modifier.width(w)) {
         when (a) {
-            is MediaActivity -> MediaExpanded(a, act)
-            is CallActivity -> CallExpanded(a, act)
+            is MediaActivity -> MediaExpanded(a, zone, act)
+            is CallActivity -> CallExpanded(a, zone, act)
             is TimerActivity -> ClockExpanded(
                 label = a.label ?: "タイマー",
                 time = { ChronoText(a.chrono, IslandColors.Orange, IslandText.bigTime) { TimeFormat.countdown(it) } },
                 actions = a.actions,
+                zone = zone,
+                width = w,
                 act = act,
             )
             is StopwatchActivity -> ClockExpanded(
                 label = if (a.lapCount > 0) "ストップウォッチ · ラップ ${a.lapCount}" else "ストップウォッチ",
                 time = { ChronoText(a.chrono, IslandColors.Orange, IslandText.bigTime, fine = true) { if (a.preciseFraction) TimeFormat.stopwatch(it) else TimeFormat.clock(it) } },
                 actions = a.actions,
+                zone = zone,
+                width = w,
                 act = act,
             )
-            is RingingActivity -> RingingExpanded(a, act)
+            is RingingActivity -> RingingExpanded(a, zone, act)
             is NavigationActivity -> NavigationExpanded(a)
-            is LiveActivity -> LiveExpanded(a, act)
+            is LiveActivity -> LiveExpanded(a, zone, w, act)
             is ReferenceActivity -> Spacer(Modifier.height(with(LocalDensity.current) { (a.expandedHeightH * m.height).toDp() }))
+        }
+    }
+}
+
+// ---- カメラ穴 ----
+
+/**
+ * 展開した島の中身の座標（島の左上が原点）で、カメラ穴を避ける範囲。穴の周りに [CameraGap] の余白を足してある。
+ * iPhone の展開表示と同じく、カメラの横（[left] より左・[right] より右）には絵や短い値だけを置き、
+ * 文字は [bottom] より下から始める（穴の上を文字が通ると、その部分が欠けて読めない）
+ */
+private data class CameraZone(val left: Dp, val right: Dp, val bottom: Dp)
+
+private val CameraGap = 4.dp
+
+/** カメラの横に置く文字の幅の下限（島がとても狭くても、何文字かは見えるように） */
+private val MinBesideCamera = 48.dp
+
+@Composable
+private fun IslandMetrics.cameraZone(): CameraZone = with(LocalDensity.current) {
+    // 展開した中身は島の左端（画面の端から margin）・上端から置かれる
+    val x = cx - margin
+    CameraZone(
+        left = (x - holeRadius).toDp() - CameraGap,
+        right = (x + holeRadius).toDp() + CameraGap,
+        bottom = cameraBottom.toDp() + CameraGap,
+    )
+}
+
+/**
+ * 展開した島のいちばん上の行: 左に [lead]、右に [trail]、その間の幅いっぱいに [text]。どれも縦の真ん中にそろえるが、
+ * 文字はカメラ穴の下（行の上端から [textTopMin]）より上には置かない。下げたときは行がその分だけ下に伸び、左右の絵は動かない
+ */
+@Composable
+private fun CameraClearRow(
+    textTopMin: Dp,
+    leadGap: Dp,
+    trailGap: Dp,
+    lead: @Composable () -> Unit,
+    text: @Composable () -> Unit,
+    trail: @Composable () -> Unit,
+) {
+    Layout(contents = listOf(lead, text, trail)) { (lm, xm, rm), c ->
+        val loose = Constraints(maxWidth = c.maxWidth, maxHeight = c.maxHeight)
+        val lp = lm.map { it.measure(loose) }
+        val rp = rm.map { it.measure(loose) }
+        val lw = lp.maxOfOrNull { it.width } ?: 0
+        val rw = rp.maxOfOrNull { it.width } ?: 0
+        val x = lw + leadGap.roundToPx()
+        val textW = (c.maxWidth - x - rw - trailGap.roundToPx()).coerceAtLeast(0)
+        val xp = xm.map { it.measure(Constraints.fixedWidth(textW)) }
+        val th = xp.maxOfOrNull { it.height } ?: 0
+        val base = maxOf(lp.maxOfOrNull { it.height } ?: 0, rp.maxOfOrNull { it.height } ?: 0, th)
+        val ty = maxOf((base - th) / 2, textTopMin.roundToPx())
+        layout(c.maxWidth, maxOf(base, ty + th)) {
+            lp.forEach { it.place(0, (base - it.height) / 2) }
+            xp.forEach { it.place(x, ty) }
+            rp.forEach { it.place(c.maxWidth - it.width, (base - it.height) / 2) }
         }
     }
 }
@@ -95,23 +162,28 @@ fun ExpandedContent(a: IslandActivity, m: IslandMetrics, act: ContentActions) {
 // ---- 音楽 ----
 
 @Composable
-private fun MediaExpanded(a: MediaActivity, act: ContentActions) {
-    Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 14.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Artwork(a.art, 56.dp, 12.dp)
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    a.title, style = IslandText.title, maxLines = 1,
-                    modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE, initialDelayMillis = 1500),
-                )
-                if (a.artist.isNotBlank()) {
-                    Text(a.artist, style = IslandText.subtitle, maxLines = 1, overflow = TextOverflow.Ellipsis)
+private fun MediaExpanded(a: MediaActivity, zone: CameraZone, act: ContentActions) {
+    val top = 18.dp
+    Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = top, bottom = 14.dp)) {
+        // 曲名は流れて（マーキー）カメラ穴の下を通るので、穴の下端より下から始める
+        CameraClearRow(
+            textTopMin = zone.bottom - top,
+            leadGap = 12.dp,
+            trailGap = 10.dp,
+            lead = { Artwork(a.art, 56.dp, 12.dp) },
+            text = {
+                Column {
+                    Text(
+                        a.title, style = IslandText.title, maxLines = 1,
+                        modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE, initialDelayMillis = 1500),
+                    )
+                    if (a.artist.isNotBlank()) {
+                        Text(a.artist, style = IslandText.subtitle, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
                 }
-            }
-            Spacer(Modifier.width(10.dp))
-            Waveform(Color(a.accent), a.playing, Modifier.size(28.dp, 20.dp), bars = 6, audio = true)
-        }
+            },
+            trail = { Waveform(Color(a.accent), a.playing, Modifier.size(28.dp, 20.dp), bars = 6, audio = true) },
+        )
         Spacer(Modifier.height(14.dp))
         SeekBar(a, act)
         Spacer(Modifier.height(8.dp))
@@ -237,17 +309,20 @@ private fun SeekBar(a: MediaActivity, act: ContentActions) {
 // ---- 通話 ----
 
 @Composable
-private fun CallExpanded(a: CallActivity, act: ContentActions) {
+private fun CallExpanded(a: CallActivity, zone: CameraZone, act: ContentActions) {
+    val avatar = if (a.incoming) 48.dp else 44.dp
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Avatar(a, if (a.incoming) 48.dp else 44.dp)
+        Avatar(a, avatar)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
+            // いちばん上の小さな文字はカメラの横の高さにあるので、長いときは穴の手前で切る
             Text(
                 a.detail ?: if (a.incoming) "着信" else "通話中",
                 style = IslandText.caption, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.widthIn(max = (zone.left - (16.dp + avatar + 12.dp)).coerceAtLeast(MinBesideCamera)),
             )
             Text(a.name, style = IslandText.title.copy(fontSize = 17.sp), maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (!a.incoming && a.chrono != null) {
@@ -284,7 +359,14 @@ private fun Avatar(a: CallActivity, size: Dp) {
 // ---- 時計 ----
 
 @Composable
-private fun ClockExpanded(label: String, time: @Composable () -> Unit, actions: List<IslandAction>, act: ContentActions) {
+private fun ClockExpanded(
+    label: String,
+    time: @Composable () -> Unit,
+    actions: List<IslandAction>,
+    zone: CameraZone,
+    width: Dp,
+    act: ContentActions,
+) {
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -296,14 +378,18 @@ private fun ClockExpanded(label: String, time: @Composable () -> Unit, actions: 
         }
         Spacer(Modifier.weight(1f))
         Column(horizontalAlignment = Alignment.End) {
-            Text(label, style = IslandText.caption.copy(color = IslandColors.Orange), maxLines = 1)
+            // 右に寄せた小さな文字はカメラの横の高さにあるので、長いときは穴の手前で切る
+            Text(
+                label, style = IslandText.caption.copy(color = IslandColors.Orange), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.widthIn(max = (width - 18.dp - zone.right).coerceAtLeast(MinBesideCamera)),
+            )
             time()
         }
     }
 }
 
 @Composable
-private fun RingingExpanded(a: RingingActivity, act: ContentActions) {
+private fun RingingExpanded(a: RingingActivity, zone: CameraZone, act: ContentActions) {
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -311,7 +397,11 @@ private fun RingingExpanded(a: RingingActivity, act: ContentActions) {
         Glyph(if (a.isTimer) IslandIcons.Timer else IslandIcons.Alarm, IslandColors.Orange, 30.dp)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Text(a.title, style = IslandText.caption.copy(color = IslandColors.Orange), maxLines = 1)
+            // いちばん上の小さな文字はカメラの横の高さにあるので、長いときは穴の手前で切る
+            Text(
+                a.title, style = IslandText.caption.copy(color = IslandColors.Orange), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.widthIn(max = (zone.left - (18.dp + 30.dp + 12.dp)).coerceAtLeast(MinBesideCamera)),
+            )
             Text(a.detail ?: "", style = IslandText.bigTime.copy(fontSize = 30.sp), maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -344,27 +434,39 @@ private fun NavigationExpanded(a: NavigationActivity) {
 
 // ---- その他 ----
 
+/**
+ * iPhone の Live Activity の展開表示と同じ並び: カメラの横の行に、左にアプリのアイコン・右に短い値（残り時間など）だけを置き、
+ * 題名と本文はカメラの下の行から全幅で書く（題名をアイコンの横に置くと、長い題名がカメラ穴の上を通る）
+ */
 @Composable
-private fun LiveExpanded(a: LiveActivity, act: ContentActions) {
+private fun LiveExpanded(a: LiveActivity, zone: CameraZone, width: Dp, act: ContentActions) {
     val color = readableColor(a.color)
-    Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 14.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+    val pad = 18.dp
+    val top = 14.dp
+    Column(Modifier.fillMaxWidth().padding(horizontal = pad, vertical = top)) {
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = (zone.bottom - top).coerceAtLeast(0.dp)),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             val px = with(LocalDensity.current) { 36.dp.roundToPx() }
             BitmapOr(rememberIconBitmap(a.largeIcon, px), 36.dp, shape = RoundedCornerShape(8.dp)) {
                 BitmapOr(rememberAppIcon(a.packageName, px), 36.dp, shape = CircleShape) { LiveIcon(a, 28.dp) }
             }
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(a.title, style = IslandText.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                if (!a.text.isNullOrBlank()) Text(a.text, style = IslandText.subtitle, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            }
+            Spacer(Modifier.weight(1f))
+            val trailing = Modifier.widthIn(max = (width - pad - zone.right).coerceAtLeast(MinBesideCamera))
             when {
-                !a.shortText.isNullOrBlank() -> Text(a.shortText, style = IslandText.title, color = color, modifier = Modifier.padding(start = 8.dp))
-                a.chrono != null -> Box(Modifier.padding(start = 8.dp)) {
+                !a.shortText.isNullOrBlank() -> Text(
+                    a.shortText, style = IslandText.title, color = color, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = trailing,
+                )
+                a.chrono != null -> Box(trailing) {
                     ChronoText(a.chrono, color, IslandText.title.copy(fontFeatureSettings = "tnum")) { TimeFormat.clock(it) }
                 }
             }
         }
+        Spacer(Modifier.height(8.dp))
+        Text(a.title, style = IslandText.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        if (!a.text.isNullOrBlank()) Text(a.text, style = IslandText.subtitle, maxLines = 2, overflow = TextOverflow.Ellipsis)
         if (a.progress != null || a.indeterminate) {
             Spacer(Modifier.height(12.dp))
             LinearBar(a.progress, color)

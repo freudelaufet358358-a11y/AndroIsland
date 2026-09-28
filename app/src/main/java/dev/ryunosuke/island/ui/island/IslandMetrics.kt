@@ -53,6 +53,9 @@ data class IslandMetrics(
     /** コンパクト時の小さな絵（ジャケット・アイコン・波形）の大きさ。HIG の寸法図では中身の高さが 0.53H */
     val glyph get() = (height * 0.55f).coerceIn(16 * density, 26 * density)
 
+    /** カメラ穴の下端（島の上端から）。展開した島の中身は、カメラの横に文字を置かず、文字はここより下から始める */
+    val cameraBottom get() = cy + holeRadius - top
+
     fun dp(px: Float) = px / density
 
     /**

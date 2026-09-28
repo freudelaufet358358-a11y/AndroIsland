@@ -86,6 +86,15 @@ class IslandMetricsTest {
         assertEquals(1080f * 3 / 8, m.statusBarGapHalf(1000f, 0f), 0.01f)
     }
 
+    @Test fun cameraBottomIsMeasuredFromIslandTop() {
+        // 島はカメラ穴を上下の真ん中に置くので、穴の下端は島の上端から H/2 + 穴の半径
+        val m = metrics()
+        assertEquals(m.height / 2 + m.holeRadius, m.cameraBottom, 0.01f)
+        // 島を下へずらしても、穴（島の真ん中とみなす）との関係は変わらない
+        val lowered = metrics(IslandSettings(offsetYDp = 10f))
+        assertEquals(lowered.height / 2 + lowered.holeRadius, lowered.cameraBottom, 0.01f)
+    }
+
     @Test fun idleWidthEstimateMatchesMetrics() {
         assertEquals(metrics().sensorWidth / d, IslandMetrics.idleWidthDp(1080 / d, IslandSettings()), 0.5f)
         assertEquals(150f, IslandMetrics.idleWidthDp(1080 / d, IslandSettings(centerWidthDp = 150f)), 0.01f)
