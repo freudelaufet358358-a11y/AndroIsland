@@ -2,6 +2,7 @@ package dev.ryunosuke.island.ui.island
 
 import android.graphics.RectF
 import dev.ryunosuke.island.data.IslandSettings
+import kotlin.math.abs
 
 /** オーバーレイ窓から見た画面の事実。ピクセル、窓の座標 */
 data class HostInfo(
@@ -66,9 +67,11 @@ data class IslandMetrics(
 
     /**
      * ステータスバーの真ん中に空ける幅の半分（画面の中央から片側）。
-     * [gapDp] が 0（自動）なら、島が待機・コンパクト（左右に絵を置いた形。音楽など）・2 つ同時のどの形でも入り、
+     * [gapDp] が 0（自動）なら、ふだん出ているコンパクト（左右に絵を置いた形。音楽など）がちょうど入り、
      * 島の端とアイコンの間に [detachedGap] だけ隙間が残る幅。ステータスバーは空きを画面の中央に置くので、
-     * 島を左右にずらしていればその分も広げる。展開した島は覆ってしまうので見ない。
+     * 島を左右にずらしていればその分も広げる。
+     * 2 つ同時の右に離れた丸・文字の多いコンパクト（タイマーの残り時間など）・展開した島は入れない
+     * （丸は島の高さで決まる大きさなので、島を短くしたときに空きが島よりずっと広くなってしまう）。
      * どちらでも、カメラ穴（中央から [holeHalf] まで）は覆い、両脇に画面幅の 1/8 ずつは残す
      * （空きが画面の端に届くと、システムがカメラ穴を角にあるものとみなし、真ん中を空けなくなる）
      */
@@ -76,12 +79,7 @@ data class IslandMetrics(
         val half = if (gapDp > 0f) {
             gapDp * density / 2
         } else {
-            val compact = compactWidth(glyph + sidePad) / 2
-            // 2 つ同時: 主は右端をカメラ部分にそろえて左へ伸び、右に離れた島が出る
-            val left = maxOf(compact, sensorWidth / 2 + minimalLead)
-            val right = maxOf(compact, sensorWidth / 2 + detachedGap + detachedWidth)
-            val center = width / 2
-            maxOf(cx + right - center, center - (cx - left)) + detachedGap
+            compactWidth(glyph + sidePad) / 2 + abs(cx - width / 2) + detachedGap
         }
         return half.coerceAtLeast(holeHalf).coerceAtMost(width * 3 / 8)
     }

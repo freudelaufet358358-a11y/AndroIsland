@@ -51,7 +51,7 @@ data class IslandSettings(
     val offsetYDp: Float = 0f,
     /** ステータスバーの時計とアイコンを島の外に出す（root で起動した Shizuku が要る。StatusBarGap） */
     val shiftStatusBar: Boolean = false,
-    /** そのときステータスバーの真ん中に空ける幅。0 は自動（島がコンパクトと 2 つ同時で入る幅） */
+    /** そのときステータスバーの真ん中に空ける幅。0 は自動（音楽などのコンパクトがちょうど入る幅） */
     val statusBarGapDp: Float = 0f,
     val excludedPackages: Set<String> = emptySet(),
 )
