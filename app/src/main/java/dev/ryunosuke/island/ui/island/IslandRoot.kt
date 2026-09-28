@@ -80,7 +80,10 @@ class IslandCallbacks(
     val onTouched: () -> Unit,
     val onAction: (IslandAction) -> Unit,
     val onTarget: (ActionTarget) -> Unit,
-    /** 一時表示をタップした（電池残量低下なら省電力をオンにする） */
+    /**
+     * 一時表示をタップした（電池残量低下なら省電力をオンにする、イヤホンなら電池の内訳を開く）。
+     * 開ける一時表示（[IslandAlert.Device.expandable]）は長押しでもこれを呼ぶ
+     */
     val onAlertTap: (IslandAlert) -> Unit,
     /** 展開していない島を下へスワイプした（通知シェードを開く） */
     val onPullDown: () -> Unit,
@@ -118,8 +121,13 @@ private data class ExpandedSlot(val a: IslandActivity) : Slot {
 }
 
 private data class AlertSlot(val alert: IslandAlert) : Slot {
-    // 電池残量低下は省電力がオンになっても入れ替えず、同じ表示の中で色を変える
-    override val id get() = if (alert is IslandAlert.LowBattery) "a:${alert.type}" else "a:$alert"
+    // 電池残量低下は省電力がオンになっても入れ替えず、同じ表示の中で色を変える。
+    // イヤホンも、あとから届いた電池は同じ表示の中で書き換える（入れ替えるのは内訳を開いたときだけ）
+    override val id get() = when (alert) {
+        is IslandAlert.LowBattery -> "a:${alert.type}"
+        is IslandAlert.Device -> "a:${alert.type}:${alert.address ?: alert.name}:${alert.detail}"
+        else -> "a:$alert"
+    }
 }
 
 /** 同じ活動でも見た目が大きく変わるとき（着信→通話中）は入れ替えのアニメーションをかける */
@@ -128,11 +136,14 @@ private fun variantOf(a: IslandActivity) = when (a) {
     else -> a.kind.name
 }
 
-/** 大きく開いた形で出す一時表示（iOS 26 の電池残量低下） */
-private fun IslandAlert.isExpanded() = this is IslandAlert.LowBattery
+/** 大きく開いた形で出す一時表示（iOS 26 の電池残量低下、イヤホンの電池の内訳） */
+private fun IslandAlert.isExpanded() = this is IslandAlert.LowBattery || (this is IslandAlert.Device && detail)
 
-/** 押している間に膨らむ状態（iPhone でも展開していない島だけが膨らむ） */
-private fun Slot.pressable() = this is IdleSlot || this is CompactSlot
+/** タップ・長押しで開ける一時表示（イヤホンの電池。左右とケースの内訳が分かっているとき） */
+private fun IslandAlert.expandable() = (this as? IslandAlert.Device)?.expandable == true
+
+/** 押している間に膨らむ状態（iPhone でも展開していない島だけが膨らむ。開けるイヤホンの電池も同じ） */
+private fun Slot.pressable() = this is IdleSlot || this is CompactSlot || (this is AlertSlot && alert.expandable())
 
 // ---- 形の目標値 ----
 
@@ -403,8 +414,9 @@ private fun motionFor(from: Slot, to: Slot, im: IslandMotion): Motion = when {
     from == HiddenSlot && to != HiddenSlot ->
         if (to.isExpandedShape()) Motion(im.fromIdleExpandWidth, im.appearHeight) else Motion(im.appearWidth, im.appearHeight)
     to.isExpandedShape() && !from.isExpandedShape() ->
-        // 待機・一時表示からは速く、コンパクトからは少しゆっくり開く（iOS 26 の見本どおり）
-        if (from is CompactSlot) Motion(im.toExpandedWidth, im.toExpandedHeight)
+        // 待機・一時表示からは速く、コンパクトからは少しゆっくり開く（iOS 26 の見本どおり）。
+        // イヤホンの電池を押して内訳を開くのは、コンパクトからと同じ
+        if (from is CompactSlot || (from is AlertSlot && from.alert.expandable())) Motion(im.toExpandedWidth, im.toExpandedHeight)
         else Motion(im.fromIdleExpandWidth, im.fromIdleExpandHeight)
     from.isExpandedShape() && !to.isExpandedShape() ->
         if (to is CompactSlot) Motion(im.fromExpandedWidth, im.fromExpandedHeight)
@@ -542,7 +554,14 @@ fun IslandRoot(
                                 }
                             },
                             onLongPress = {
-                                if (!expandedState.value && it != null) {
+                                val s = slotState.value
+                                if (s is AlertSlot) {
+                                    // 開ける一時表示（イヤホンの電池）は、長押しでもタップと同じく開く
+                                    if (s.alert.expandable()) {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        callbacks.onAlertTap(s.alert)
+                                    }
+                                } else if (!expandedState.value && it != null) {
                                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                     callbacks.onLongPress(it)
                                 }

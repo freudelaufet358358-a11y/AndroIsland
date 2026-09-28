@@ -6,6 +6,10 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.getValue
@@ -39,7 +43,9 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import dev.ryunosuke.island.island.IslandAlert
+import dev.ryunosuke.island.island.PodsBattery
 import dev.ryunosuke.island.ui.island.IslandColors
 import dev.ryunosuke.island.ui.island.IslandIcons
 import dev.ryunosuke.island.ui.island.IslandMetrics
@@ -49,7 +55,7 @@ import kotlinx.coroutines.delay
 /** 省電力（バッテリー セーバー）が今入っているか。島の外（OverlayHost）から渡す */
 val LocalBatterySaverOn = androidx.compose.runtime.staticCompositionLocalOf { false }
 
-/** 充電・消音などの一時表示。コンパクトより少し横に広い形で出す（電池残量低下だけは展開した形） */
+/** 充電・消音などの一時表示。コンパクトより少し横に広い形で出す（電池残量低下と、イヤホンの電池の内訳は展開した形） */
 @Composable
 fun AlertContent(alert: IslandAlert, m: IslandMetrics) {
     val g = m.glyphDp()
@@ -90,28 +96,106 @@ fun AlertContent(alert: IslandAlert, m: IslandMetrics) {
                 )
             },
         )
-        // iPhone と同じく、左にイヤホン、右に電池。電池が分からないときだけ右に名前を出す
-        is IslandAlert.Device -> CompactRow(
-            m,
-            leading = { Glyph(IslandIcons.Headphones, Color.White, g * 0.9f) },
-            trailing = {
-                val b = alert.battery
-                if (b != null) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("$b%", style = IslandText.compact, color = IslandColors.Green)
-                        Spacer(Modifier.width(6.dp))
-                        ProgressRing(b / 100f, IslandColors.Green, Modifier.size(g * 0.85f))
+        is IslandAlert.Device -> if (alert.detail && alert.pods != null) {
+            // 左右とケースの内訳（コンパクトをタップ・長押しすると開く）
+            PodsContent(alert, alert.pods, m)
+        } else {
+            // iPhone と同じく、左にイヤホン、右に電池。電池が分からないときだけ右に名前を出す
+            CompactRow(
+                m,
+                leading = { Glyph(IslandIcons.Headphones, Color.White, g * 0.9f) },
+                trailing = {
+                    val b = alert.battery
+                    if (b != null) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("$b%", style = IslandText.compact, color = IslandColors.Green)
+                            Spacer(Modifier.width(6.dp))
+                            ProgressRing(b / 100f, IslandColors.Green, Modifier.size(g * 0.85f))
+                        }
+                    } else {
+                        Text(alert.name, style = IslandText.compact, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 96.dp))
                     }
-                } else {
-                    Text(alert.name, style = IslandText.compact, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 96.dp))
-                }
-            },
-        )
+                },
+            )
+        }
         IslandAlert.Unlock -> CompactRow(
             m,
             leading = { UnlockGlyph(g) },
             trailing = { Spacer(Modifier.size(0.dp)) },
         )
+    }
+}
+
+/**
+ * イヤホンの電池の内訳（左・右・ケース）。つながったときの一時表示をタップ・長押しすると、展開した形でこれを出す。
+ * iPhone の島は AirPods の内訳を出さないので、形は展開した島の決まり（カメラの横には絵と短い値だけ、文字はカメラ穴の下から）に、
+ * 中身は iOS の「バッテリー」ウィジェット（残量の輪と数字）に寄せた
+ */
+@Composable
+private fun PodsContent(alert: IslandAlert.Device, pods: PodsBattery, m: IslandMetrics) {
+    val zone = m.cameraZone()
+    val w = m.expandedWidthDp()
+    val pad = 18.dp
+    val top = 14.dp
+    Column(Modifier.width(w).padding(horizontal = pad, vertical = top)) {
+        // カメラの横の行: 左にイヤホン、右に全体の残量（コンパクトの右に出ていたのと同じ値）
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = (zone.bottom - top).coerceAtLeast(0.dp)),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Glyph(IslandIcons.Headphones, Color.White, 28.dp)
+            Spacer(Modifier.weight(1f))
+            alert.battery?.let {
+                Text(
+                    "$it%", style = IslandText.title, color = IslandColors.Green, maxLines = 1,
+                    modifier = Modifier.widthIn(max = (w - pad - zone.right).coerceAtLeast(MinBesideCamera)),
+                )
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(alert.name, style = IslandText.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Spacer(Modifier.height(12.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+            PodsPart("左", pods.left)
+            PodsPart("右", pods.right)
+            PodsPart("ケース", pods.case)
+        }
+    }
+}
+
+/** 残量の輪と数字。充電中は稲妻を付け、充電していなくて 20% 以下なら赤。分からないものは空の輪と「—」 */
+@Composable
+private fun PodsPart(label: String, part: PodsBattery.Part?) {
+    val color = when {
+        part == null -> IslandColors.Gray
+        !part.charging && part.level <= 20 -> IslandColors.Red
+        else -> IslandColors.Green
+    }
+    val text = if (part == null) IslandColors.Secondary else Color.White
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(Modifier.size(52.dp), contentAlignment = Alignment.Center) {
+            LevelRing(part?.level, color, Modifier.fillMaxSize(), stroke = 5.dp)
+            Text(label, style = IslandText.caption, color = text, maxLines = 1)
+        }
+        Spacer(Modifier.height(6.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (part?.charging == true) Glyph(IslandIcons.Bolt, IslandColors.Green, 14.dp)
+            Text(part?.let { "${it.level}%" } ?: "—", style = IslandText.compact.copy(fontSize = 14.sp), color = text)
+        }
+    }
+}
+
+/** 残量の輪。[level] が null なら器だけ */
+@Composable
+private fun LevelRing(level: Int?, color: Color, modifier: Modifier, stroke: Dp) {
+    Canvas(modifier) {
+        val s = stroke.toPx()
+        val inset = Offset(s / 2, s / 2)
+        val arc = Size(size.width - s, size.height - s)
+        drawArc(color.copy(alpha = 0.3f), 0f, 360f, false, inset, arc, style = Stroke(s))
+        if (level != null && level > 0) {
+            drawArc(color, -90f, 3.6f * level.coerceIn(0, 100), false, inset, arc, style = Stroke(s, cap = StrokeCap.Round))
+        }
     }
 }
 

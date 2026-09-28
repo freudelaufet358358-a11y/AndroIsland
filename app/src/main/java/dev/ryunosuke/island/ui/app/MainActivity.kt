@@ -208,7 +208,7 @@ private fun MainScreen() {
 
         item {
             Section("デモ") {
-                Text("本物の出来事を待たずに見た目と操作を試せます。長押しで展開、左右スワイプでしまいます。しまったあとは、残った島をタップ（または左右にスワイプ）すると戻ります。", color = IslandColors.Secondary, fontSize = 13.sp)
+                Text("本物の出来事を待たずに見た目と操作を試せます。長押しで展開、左右スワイプでしまいます。しまったあとは、残った島をタップ（または左右にスワイプ）すると戻ります。イヤホンは、出ている間にタップ・長押しすると左右とケースの電池を開きます。", color = IslandColors.Secondary, fontSize = 13.sp)
                 Spacer(Modifier.height(8.dp))
                 DemoButtons()
             }
@@ -303,6 +303,13 @@ private fun MainScreen() {
                 SwitchRow("サイレント・バイブの切り替え", settings.ringer) { v -> update { it.copy(ringer = v) } }
                 SwitchRow("おやすみモード", settings.dnd) { v -> update { it.copy(dnd = v) } }
                 SwitchRow("イヤホンの接続", settings.bluetooth) { v -> update { it.copy(bluetooth = v) } }
+                if (settings.bluetooth) {
+                    Text(
+                        "Evolution X では AirPods の電池を BtHelper（設定の機器の画面に左右とケースの電池を出している仕組み）から受け取ります。" +
+                            "Shizuku が動いていれば、表示をタップ・長押しすると左右とケースの電池も出します。",
+                        color = IslandColors.Secondary, fontSize = 12.sp, modifier = Modifier.padding(bottom = 4.dp),
+                    )
+                }
                 SwitchRow("ロック解除", settings.unlock) { v -> update { it.copy(unlock = v) } }
             }
         }
@@ -405,7 +412,7 @@ private fun DemoButtons() {
         "サイレント" to IslandAlert.Ringer(android.media.AudioManager.RINGER_MODE_SILENT),
         "着信音" to IslandAlert.Ringer(android.media.AudioManager.RINGER_MODE_NORMAL),
         "おやすみ" to IslandAlert.Dnd(true),
-        "イヤホン" to IslandAlert.Device("AirPods Pro", 82, wired = false),
+        "イヤホン" to DemoController.earbuds(),
         "ロック解除" to IslandAlert.Unlock,
     )
     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -478,7 +485,7 @@ private fun ShizukuRow(status: ShizukuShell.Status, missing: Boolean, onGrant: (
                 "Island に Shizuku の使用を許可すると、省電力を島から直接入れ・切りでき、足りない許可もまとめて付けます"
             ShizukuShell.Status.Ready ->
                 if (missing) "下の足りない許可をまとめて付けられます"
-                else "省電力を島から直接入れ・切りし、Recents で払ったアプリの音楽をすぐ消します"
+                else "省電力を島から直接入れ・切りし、Recents で払ったアプリの音楽をすぐ消し、AirPods の左右とケースの電池を読みます（Evolution X）"
         },
         status == ShizukuShell.Status.Ready && !missing,
         fixLabel = when (status) {

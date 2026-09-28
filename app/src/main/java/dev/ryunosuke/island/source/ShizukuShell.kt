@@ -1,6 +1,8 @@
 package dev.ryunosuke.island.source
 
 import android.app.ActivityManager
+import android.bluetooth.BluetoothDevice
+import android.content.AttributionSource
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -8,6 +10,7 @@ import android.net.Uri
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.IBinder
+import android.os.IInterface
 import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -16,6 +19,7 @@ import org.lsposed.hiddenapibypass.HiddenApiBypass
 import rikka.shizuku.Shizuku
 import rikka.shizuku.ShizukuBinderWrapper
 import rikka.shizuku.SystemServiceHelper
+import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Method
 
 /**
@@ -25,6 +29,7 @@ import java.lang.reflect.Method
  *   付けたものは端末の設定として残るので、あとで Shizuku が止まっても消えない
  * - 省電力を `cmd power set-mode` で直接入れ・切りする（設定画面で手動で入れたものも切れる）
  * - 最近のタスクの一覧を読む（Recents で払われたアプリを突き止める）
+ * - Bluetooth 機器のメタデータを読む（Evolution X の BtHelper が書いた、AirPods の左右とケースの電池）
  * - root で動いているときだけ、ステータスバーの真ん中を島の幅だけ空ける（[StatusBarGap]）
  *
  * root なしの Shizuku は端末を再起動すると止まる。呼ぶ側は毎回 [isReady] を確かめ、使えなければ今までのやり方に戻す。
@@ -170,13 +175,45 @@ object ShizukuShell {
         }
     }
 
+    /**
+     * Bluetooth 機器のメタデータ（BluetoothDevice#getMetadata。左右とケースの電池など）を読む。読めなかったキーは null。
+     * 普通のアプリには許されていない（BLUETOOTH_PRIVILEGED が要る）ので、このプロセスが持っている IBluetooth の binder を
+     * Shizuku 越しに呼ぶ（shell も root もこの権限を持っている）。隠し API をリフレクションで呼ぶ。[handler] のスレッドから呼ぶ
+     */
+    fun bluetoothMetadata(device: BluetoothDevice, keys: IntArray): Map<Int, ByteArray?> {
+        check(isReady()) { "Shizuku が使えない" }
+        allowHiddenApi()
+        try {
+            // BluetoothDevice#getMetadata も、この IBluetooth を呼んでいる（Bluetooth がオフなら null）
+            val local = BluetoothDevice::class.java.getDeclaredMethod("getService")
+                .apply { isAccessible = true }
+                .invoke(null) as? IInterface ?: error("Bluetooth がオフ")
+            val bt = Class.forName("android.bluetooth.IBluetooth\$Stub")
+                .getMethod("asInterface", IBinder::class.java)
+                .invoke(null, ShizukuBinderWrapper(local.asBinder()))
+            val getMetadata = Class.forName("android.bluetooth.IBluetooth").methods
+                .first { it.name == "getMetadata" && it.parameterCount == 3 }
+            // BLUETOOTH_PRIVILEGED は呼び出し元（Shizuku の uid）で、BLUETOOTH_CONNECT はここで名乗る受け手で確かめられる。
+            // 受け手は shell にする（root で動いていても。root は他の uid を名乗れる）
+            val source = AttributionSource.Builder(SHELL_UID).setPackageName(SHELL_PACKAGE).build()
+            return keys.associateWith { getMetadata.invoke(bt, device, it, source) as ByteArray? }
+        } catch (e: InvocationTargetException) {
+            // 呼んだ先の例外（権限が無い SecurityException など）をそのまま見せる
+            throw e.targetException
+        }
+    }
+
     @Volatile
     private var hiddenApiAllowed = false
 
-    /** このプロセスだけ、隠し API の制限を外す（IActivityTaskManager・ParceledListSlice を呼ぶため） */
+    /** このプロセスだけ、隠し API の制限を外す（IActivityTaskManager・ParceledListSlice・IBluetooth を呼ぶため） */
     private fun allowHiddenApi() {
         if (!hiddenApiAllowed) hiddenApiAllowed = HiddenApiBypass.addHiddenApiExemptions("L")
     }
+
+    /** adb の shell の uid（Process.SHELL_UID は隠し API）とパッケージ */
+    private const val SHELL_UID = 2000
+    private const val SHELL_PACKAGE = "com.android.shell"
 
     private const val TAG = "IslandShizuku"
 }

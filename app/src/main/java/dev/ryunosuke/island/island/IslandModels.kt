@@ -236,6 +236,27 @@ data class ReferenceActivity(
     override val open: ActionTarget? get() = null
 }
 
+/**
+ * 左右が分かれたイヤホン（AirPods など）の電池。分からない部分は null
+ * （ケースは、イヤホンを入れて蓋を開けたときしか分からないことが多い）。
+ * ヘッドホン型（AirPods Max など）は [main] だけ
+ */
+data class PodsBattery(
+    val left: Part? = null,
+    val right: Part? = null,
+    val case: Part? = null,
+    val main: Part? = null,
+) {
+    /** level は 0〜100 */
+    data class Part(val level: Int, val charging: Boolean)
+
+    /** 左右とケースの内訳がある */
+    val hasParts: Boolean get() = left != null || right != null || case != null
+
+    /** 島のコンパクトに出す 1 つの値。左右の低い方（BtHelper が全体の残量として知らせるのと同じ）。左右が分からなければ全体の値 */
+    val headset: Int? get() = listOfNotNull(left?.level, right?.level).minOrNull() ?: main?.level
+}
+
 /** 一瞬だけ出して引っ込める知らせ（充電、消音など） */
 sealed interface IslandAlert {
     /** 同じ種類が続いたら差し替える */
@@ -254,9 +275,26 @@ sealed interface IslandAlert {
     /** mode は AudioManager.RINGER_MODE_* */
     data class Ringer(val mode: Int) : IslandAlert { override val type get() = "ringer" }
     data class Dnd(val on: Boolean) : IslandAlert { override val type get() = "dnd" }
-    data class Device(val name: String, val battery: Int?, val wired: Boolean) : IslandAlert {
+
+    /**
+     * イヤホン・ヘッドホンがつながった。battery は全体の残量（左右が分かれたものは低い方）。
+     * pods は左右とケースの内訳（Evolution X の BtHelper が書いたものを Shizuku で読めたときだけ）。
+     * detail は内訳を展開した形で出しているか（コンパクトをタップ・長押しすると開く）
+     */
+    data class Device(
+        val name: String,
+        val battery: Int?,
+        val wired: Boolean,
+        /** Bluetooth のアドレス。あとから届いた電池で、出している表示を書き換えるのに使う */
+        val address: String? = null,
+        val pods: PodsBattery? = null,
+        val detail: Boolean = false,
+    ) : IslandAlert {
         override val type get() = "device"
-        override val durationMs get() = 3_500L
+        override val durationMs get() = if (detail) 6_000L else 3_500L
+
+        /** タップ・長押しで左右とケースの内訳を開ける */
+        val expandable: Boolean get() = !detail && pods?.hasParts == true
     }
     data object Unlock : IslandAlert {
         override val type get() = "unlock"

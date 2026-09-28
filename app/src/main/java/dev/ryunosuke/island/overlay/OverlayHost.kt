@@ -71,7 +71,10 @@ class OverlayHost(
     fun attach() {
         if (root != null) return
         val host = TouchHost(context) {
-            if (g.arbiter.presentation.value.expanded) g.arbiter.collapse()
+            val p = g.arbiter.presentation.value
+            if (p.expanded) g.arbiter.collapse()
+            // 開いたイヤホンの電池の内訳も、外側を触ったら閉じる
+            else if ((p.alert as? IslandAlert.Device)?.detail == true) g.arbiter.dismissAlert()
         }
         val compose = ComposeView(context).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
@@ -162,7 +165,11 @@ class OverlayHost(
             g.arbiter.touched()
         },
         onAlertTap = { a ->
-            if (a is IslandAlert.LowBattery) g.actions.run(ActionTarget.BatterySaverToggle)
+            when {
+                a is IslandAlert.LowBattery -> g.actions.run(ActionTarget.BatterySaverToggle)
+                // イヤホンは左右とケースの電池の内訳を開く（長押しでも同じ）
+                a is IslandAlert.Device && a.expandable -> g.arbiter.postAlert(a.copy(detail = true))
+            }
         },
         onPullDown = onPullDown,
         onRestore = { g.arbiter.restoreHidden() },

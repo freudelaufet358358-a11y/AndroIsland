@@ -108,15 +108,15 @@ fun ExpandedContent(a: IslandActivity, m: IslandMetrics, act: ContentActions) {
  * iPhone の展開表示と同じく、カメラの横（[left] より左・[right] より右）には絵や短い値だけを置き、
  * 文字は [bottom] より下から始める（穴の上を文字が通ると、その部分が欠けて読めない）
  */
-private data class CameraZone(val left: Dp, val right: Dp, val bottom: Dp)
+internal data class CameraZone(val left: Dp, val right: Dp, val bottom: Dp)
 
 private val CameraGap = 4.dp
 
 /** カメラの横に置く文字の幅の下限（島がとても狭くても、何文字かは見えるように） */
-private val MinBesideCamera = 48.dp
+internal val MinBesideCamera = 48.dp
 
 @Composable
-private fun IslandMetrics.cameraZone(): CameraZone = with(LocalDensity.current) {
+internal fun IslandMetrics.cameraZone(): CameraZone = with(LocalDensity.current) {
     // 展開した中身は島の左端（画面の端から margin）・上端から置かれる
     val x = cx - margin
     CameraZone(

@@ -118,6 +118,16 @@ class IslandArbiter(
     /** 今出している（出そうとしている）一時表示 */
     val currentAlert: IslandAlert? get() = alert.value
 
+    /**
+     * 出している一時表示を、表示時間はそのままで書き換える（イヤホンの電池があとから届いたときなど）。
+     * [f] が null を返したら何もしない。何も出していなければ何もしない
+     */
+    fun updateAlert(f: (IslandAlert) -> IslandAlert?) {
+        val cur = alert.value ?: return
+        val next = f(cur) ?: return
+        if (next != cur) alert.value = next
+    }
+
     /** 一時表示を引っ込める（スワイプで払ったとき） */
     fun dismissAlert() {
         alertJob?.cancel()

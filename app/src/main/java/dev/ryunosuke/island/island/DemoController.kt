@@ -197,5 +197,17 @@ class DemoController(@Suppress("unused") private val scope: CoroutineScope) {
         private const val KEY_RECORDING = "demo:recording"
 
         fun isDemo(key: String) = key.startsWith("demo:")
+
+        /** デモのイヤホン。左右とケースの内訳つきなので、タップ・長押しで開ける（detail = true は開いた形） */
+        fun earbuds(detail: Boolean = false) = IslandAlert.Device(
+            "AirPods Pro", 82, wired = false,
+            pods = PodsBattery(
+                left = PodsBattery.Part(82, charging = false),
+                right = PodsBattery.Part(88, charging = false),
+                case = PodsBattery.Part(45, charging = true),
+                main = PodsBattery.Part(82, charging = false),
+            ),
+            detail = detail,
+        )
     }
 }

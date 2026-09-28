@@ -1,5 +1,7 @@
 package dev.ryunosuke.island.debug
 
+import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -22,6 +24,7 @@ import dev.ryunosuke.island.island.DemoController
 import dev.ryunosuke.island.island.IslandActivity
 import dev.ryunosuke.island.island.IslandAlert
 import dev.ryunosuke.island.island.MediaActivity
+import dev.ryunosuke.island.source.PodsMetadata
 import dev.ryunosuke.island.source.ShizukuShell
 import kotlinx.coroutines.launch
 
@@ -31,12 +34,14 @@ import kotlinx.coroutines.launch
  *
  *   adb shell am broadcast -n dev.ryunosuke.island/.debug.ShellCommandReceiver -a dev.ryunosuke.island.SHELL --es cmd "demo Media"
  *
- * cmd: demo <Type> / alert <charging|battery|silent|ring|dnd|device|unlock> / clear /
+ * cmd: demo <Type> / alert <charging|battery|silent|ring|dnd|device|pods|unlock> / clear /
  *      expand / collapse / media start|stop / state / idle on|off / refonly on|off / refseq / refseq26 /
  *      tone <Hz> <秒>（ごく小さな音を鳴らし、波形の解析結果をログに出す） /
  *      playraw <名前>（アプリ専用フォルダの 48kHz・モノラル・16bit の生データを、試験用の MediaSession を立てて鳴らす） /
  *      shizuku（Shizuku の状態と、Shizuku で読んだ最近のタスクのアプリを "shizuku=…" の 1 行でログに出す） /
- *      statusbar（ステータスバーの空きの状態と、端末が今報告しているカメラ穴の上端の矩形を "statusbar=…" の 1 行でログに出す）
+ *      statusbar（ステータスバーの空きの状態と、端末が今報告しているカメラ穴の上端の矩形を "statusbar=…" の 1 行でログに出す） /
+ *      earbuds（ペアリング済みの機器ごとに、Bluetooth の電池と、Shizuku で読んだ左右とケースの電池（Evolution X の BtHelper が
+ *      書いたメタデータ）を "earbuds=…" の 1 行でログに出す）
  */
 class ShellCommandReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -79,6 +84,10 @@ class ShellCommandReceiver : BroadcastReceiver() {
                         "lockscreenPending=${g.statusBarGap.lockScreenPending.value}",
                 )
             }
+            "earbuds" -> {
+                val app = context.applicationContext
+                ShizukuShell.handler.post { Log.i(TAG, "earbuds=${describeEarbuds(app)}") }
+            }
         }
         Log.i(TAG, "cmd=${args.joinToString(" ")} state=${describe()}")
     }
@@ -90,9 +99,29 @@ class ShellCommandReceiver : BroadcastReceiver() {
         "vibrate" -> IslandAlert.Ringer(AudioManager.RINGER_MODE_VIBRATE)
         "ring" -> IslandAlert.Ringer(AudioManager.RINGER_MODE_NORMAL)
         "dnd" -> IslandAlert.Dnd(true)
-        "device" -> IslandAlert.Device("AirPods Pro", 82, wired = false)
+        "device" -> DemoController.earbuds()
+        "pods" -> DemoController.earbuds(detail = true)
         "unlock" -> IslandAlert.Unlock
         else -> null
+    }
+
+    /**
+     * ペアリング済みの機器ごとに「名前:電池:内訳」。電池は Bluetooth が知っている値（つながっていなければ -1）、
+     * 内訳は Shizuku で読んだメタデータ（Shizuku が使えなければ "-"、読めなければ "error:…"、何も書かれていなければ "null"）。
+     * Shizuku のスレッドから呼ぶ
+     */
+    private fun describeEarbuds(context: Context): String {
+        val devices = runCatching { context.getSystemService(BluetoothManager::class.java).adapter.bondedDevices.orEmpty() }
+            .getOrElse { return "error:${it.javaClass.simpleName}" }
+        val ready = ShizukuShell.isReady()
+        return devices.joinToString(prefix = "[", postfix = "]") { d ->
+            val name = runCatching { d.alias ?: d.name }.getOrNull() ?: d.address
+            val level = runCatching { BluetoothDevice::class.java.getMethod("getBatteryLevel").invoke(d) as Int }.getOrDefault(-1)
+            val pods = if (!ready) "-" else runCatching {
+                PodsMetadata.parse(ShizukuShell.bluetoothMetadata(d, PodsMetadata.KEYS)).toString()
+            }.getOrElse { "error:${it.javaClass.simpleName}" }
+            "$name:$level:$pods"
+        }
     }
 
     companion object {

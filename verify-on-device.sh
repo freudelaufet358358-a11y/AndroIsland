@@ -153,7 +153,7 @@ cmd clear; sleep 1
 expect "region=-" "しまったものが無くなると島も消える"
 
 echo "== 一時表示 =="
-for a in charging battery silent dnd device unlock; do
+for a in charging battery silent dnd device pods unlock; do
   require_device
   cmd clear; sleep 0.5
   cmd alert "$a"; sleep 0.5
@@ -165,8 +165,24 @@ for a in charging battery silent dnd device unlock; do
     read -r L T R B <<<"$(region)"
     if [ -n "${L:-}" ] && [ $(( B - T )) -gt $(dp 80) ]; then pass "電池残量低下は展開した形 ($L,$T)-($R,$B)"; else fail "電池残量低下が展開した形になっていない"; fi
   fi
+  if [ "$a" = pods ]; then
+    read -r L T R B <<<"$(region)"
+    if [ -n "${L:-}" ] && [ $(( B - T )) -gt $(dp 80) ]; then pass "イヤホンの電池の内訳は展開した形 ($L,$T)-($R,$B)"; else fail "イヤホンの電池の内訳が展開した形になっていない"; fi
+  fi
   sleep 2.5
 done
+cmd clear; sleep 0.5
+# イヤホンの表示（左右とケースの内訳つき）をタップすると、内訳を開く
+cmd alert device; sleep 0.8
+read -r L T R B <<<"$(region)"
+if [ -n "${L:-}" ]; then
+  A shell input tap $(( (L + R) / 2 )) $(( (T + B) / 2 )) >/dev/null; sleep 1
+  read -r L T R B <<<"$(region)"
+  if [ -n "${L:-}" ] && [ $(( B - T )) -gt $(dp 80) ]; then pass "イヤホンの表示をタップすると電池の内訳が開く"; shot "alert-pods-tap"; else fail "イヤホンの表示をタップしても内訳が開かない"; fi
+else
+  fail "イヤホンの表示の位置が取れない"
+fi
+sleep 6.5
 cmd clear; sleep 0.5
 
 echo "== 展開と操作（本物の MediaSession） =="
@@ -327,6 +343,13 @@ else
     A shell dumpsys battery reset >/dev/null
     info "電池の状態を元に戻した（省電力: $(saver)）"
   fi
+  # ペアリング済みの機器のメタデータ（Evolution X の BtHelper が AirPods の左右とケースの電池を書く）を Shizuku で読めるか。
+  # 何も書かれていない機器は null。つないでいる AirPods があれば、その内訳が出る
+  A logcat -c >/dev/null
+  cmd earbuds; sleep 1.5
+  eb=$(A logcat -d -s IslandShell:I | grep -o 'earbuds=.*' | tail -1)
+  info "${eb:-earbuds: 応答なし}"
+  if [[ -z "$eb" || "$eb" == *"error:"* ]]; then fail "Shizuku で Bluetooth のメタデータを読めない"; else pass "Shizuku で Bluetooth のメタデータを読める"; fi
 fi
 cmd clear
 

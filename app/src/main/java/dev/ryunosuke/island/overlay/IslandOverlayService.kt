@@ -56,8 +56,12 @@ class IslandOverlayService : AccessibilityService() {
         val s = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
         scope = s
         chrome.value = chrome.value.copy(landscape = isLandscape(resources.configuration))
-        events = SystemEventSource(this, g.settings, onBatterySaverChanged = ::onBatterySaverChanged) { g.arbiter.postAlert(it) }
-            .also { it.start() }
+        events = SystemEventSource(
+            this, g.settings,
+            onBatterySaverChanged = ::onBatterySaverChanged,
+            currentAlert = { g.arbiter.currentAlert },
+            updateAlert = g.arbiter::updateAlert,
+        ) { g.arbiter.postAlert(it) }.also { it.start() }
         onBatterySaverChanged(BatterySaver.isOn(this))
         val h = OverlayHost(
             this, g, visible,

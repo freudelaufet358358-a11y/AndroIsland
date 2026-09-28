@@ -52,11 +52,26 @@ adb shell pm grant dev.ryunosuke.island android.permission.WRITE_SECURE_SETTINGS
 - **省電力を島から直接入れ・切りする。** 設定画面やクイック設定で手動で入れた省電力も、島のボタンで切れる。
   スケジュールには触らない（下の「省電力はシステムの『スケジュール』で入れる」の回り道が要らない）
 - **Recents で払ったアプリの音楽をすぐ消す。** 一時停止してから払ったものも、60 秒の猶予を待たずに消える
+- **（Evolution X）AirPods の左右とケースの電池を出す。** 下の「AirPods の電池」
 - **（root で起動したときだけ）ステータスバーの時計とアイコンを島の外に出す。** 下の「ステータスバーを島の外に寄せる」
 
 root なしの Shizuku は端末を再起動すると止まる（Shizuku のアプリからワイヤレスデバッグで起動し直す）。
 止まっている間の省電力と Recents は、今までのやり方（スケジュール・Recents を開いている間に止まったら消す）に戻る。
 Magisk などで root を取っていれば、Shizuku のアプリで root で起動でき、再起動のたびに起動し直す手間もなくなる。
+
+### AirPods の電池（Evolution X）
+
+Evolution X には AirPods の電池を読むシステムアプリ **BtHelper**（OpenPods・CAPod・LibrePods を元にしたもの）が入っていて、
+設定の「接続済みのデバイス」の AirPods の画面に左・右・ケースの電池を出している。島はこれを受け取って出す。
+
+- **全体の残量（コンパクトの電池リング）は、そのまま届く。** BtHelper は左右の低い方を、普通の Bluetooth の電池の知らせ
+  （`ACTION_BATTERY_LEVEL_CHANGED`）で流すので、Bluetooth の許可だけで受け取れる。つないでから電池が届くのを 3 秒まで待って出し、
+  出している間に届いた電池で書き換える（今までは接続の 1.2 秒後に一度だけ読んでいたので、それより遅れて届く電池は出なかった）
+- **左・右・ケースの内訳は、Shizuku が動いていれば出る。** コンパクトをタップか長押しすると、展開した形で左・右・ケースの
+  残量の輪と数字（充電中は稲妻、20% 以下は赤）を 6 秒出す（外側をタップ・上へスワイプで閉じる）。
+  BtHelper は内訳を Bluetooth 機器のメタデータ（設定アプリが読んでいるもの）に書くが、読むには `BLUETOOTH_PRIVILEGED` が要り、
+  普通のアプリには許されない。shell にはこの権限があるので、Shizuku 越しに読む
+- Evolution X 以外（BtHelper が無い）では今までどおり、イヤホン自身が送ってくる電池だけを出す（AirPods は 10% 刻み）
 
 ### ステータスバーを島の外に寄せる（root）
 
@@ -99,7 +114,7 @@ Magisk などで root を取っていれば、Shizuku のアプリで root で�
 | 電池残量低下（20%・10%） | （iOS 26 Beta 5 と同じく展開した形で出る）残量と赤い電池のボタン。タップで省電力をオン → 黄色、もう一度でオフ。先に入っていれば最初から黄色 | — | 同上 |
 | 消音スイッチ | ベル ／ サイレント・バイブ・着信音 | — | 同上 |
 | 集中モード | 月 ／ おやすみ オン・オフ | — | 同上 |
-| AirPods の接続 | ヘッドホンと名前 ／ 電池リング | — | Bluetooth（電池は取れる機種のみ） |
+| AirPods の接続 | ヘッドホンと名前 ／ 電池リング（左右の低い方） | タップか長押しで左・右・ケースの電池と充電中か（Evolution X ＋ Shizuku） | Bluetooth の電池の知らせ。Evolution X では BtHelper が流す AirPods の電池（下の「AirPods の電池」） |
 | Face ID のロック解除 | 錠が開く | — | ロック解除のブロードキャスト |
 | 2 つ同時 | 右に離れた丸（粘ってちぎれる） | 丸を長押しでそちらを展開 | 優先度で主と副を決める |
 
@@ -167,6 +182,15 @@ ui/island/ 島の描画。形は AGSL シェーダ、中身は Compose
   最近のタスクの一覧だけは、shell の権限で `IActivityTaskManager#getRecentTasks` を呼ぶ（隠し API の制限は HiddenApiBypass で外す）。
   Recents を開いたときの一覧と、開いている間 0.4 秒ごと（と閉じて 1.5 秒）に取り直した一覧を比べ、消えたタスクのアプリを払われたとみなす。
   Shizuku の `newProcess` は API 13 で非公開になったのでリフレクションで呼ぶ（`proguard-rules.pro` で残している）
+- **AirPods の左右とケースの電池は、Bluetooth 機器のメタデータから読む（`PodsMetadata`）。** Evolution X の BtHelper は、
+  AirPods の BLE の広告と AACP（L2CAP の Apple の独自の通信）から読んだ電池を `BluetoothDevice#setMetadata`
+  （`METADATA_UNTETHERED_LEFT_BATTERY` など。値は `85` のような 10 進の文字列、不明は `-1`、充電中かは `TRUE` / `FALSE`）に書いてから、
+  左右の低い方を `ACTION_BATTERY_LEVEL_CHANGED` で流す。メタデータを読む `getMetadata` は `BLUETOOTH_PRIVILEGED` の要る @SystemApi なので、
+  このプロセスの `BluetoothAdapter` が持っている `IBluetooth` の binder を `ShizukuBinderWrapper` で包み、
+  `IBluetooth#getMetadata(device, key, AttributionSource)` をリフレクションで呼ぶ（Bluetooth は `BLUETOOTH_PRIVILEGED` を呼び出し元の uid で、
+  `BLUETOOTH_CONNECT` を名乗った受け手で確かめるので、受け手は shell と名乗る）。
+  BtHelper は接続が切れてもメタデータを消さないので、つないだ直後は前の接続の値が残っている。そこで、届いた電池の知らせと
+  `METADATA_MAIN_BATTERY`（BtHelper が知らせと同じ値を書く）が合ってから読んだ値だけを使う
 - **ステータスバーの空きは、カメラ穴の外接矩形の設定値を差し替えて作る（`StatusBarGap`）。** ステータスバーは
   `config_mainBuiltInDisplayCutoutRectApproximation`（Pixel 6a は 480〜625px × 132px）の幅だけ真ん中を空けて時計とアイコンを並べるので、
   この値を島が入る幅の矩形（高さは同じ）にする fabricated overlay を `cmd overlay fabricate` で作り、`cmd overlay enable` で有効にする。
@@ -203,6 +227,10 @@ tools/record_reference.sh            # 実機: WWDC23 の見本と同じ順番�
 `statusbar` はステータスバーの空きの状態と、端末が今報告しているカメラ穴の上端の矩形を
 `statusbar=Applied(widthDp=221) on=true cutout=[250,0][830,132] lockscreenPending=false` のような 1 行でログに出す
 （`verify-on-device.sh` は、設定でオンのときだけこれを確かめ、音楽のコンパクトを出した画面を撮る。オン・オフはしない）。
+`earbuds` はペアリング済みの機器ごとに、Bluetooth が知っている電池と、Shizuku で読んだ左右とケースの電池を
+`earbuds=[AirPods Pro:80:PodsBattery(left=Part(level=85, charging=false), …)]` のような 1 行でログに出す
+（`verify-on-device.sh` は Shizuku が使えるときだけ、これが読めることを確かめる）。
+`alert pods` は左右とケースの内訳を開いた形を、`alert device` は内訳つきのコンパクトを出す（タップで開く）。
 
 ## Apple の見本との一致
 
@@ -318,6 +346,13 @@ Compose 以外のソースを API 37 のフレームワーク（Robolectric の 
 ロック画面のステータスバーもホーム画面と同じ幅で並ぶ、`verify-on-device.sh` の「ステータスバーの空き」の段が通る、
 スイッチを切ると（画面を一度消したあと）ロック画面も元の並びに戻る。
 
+AirPods の電池（2026-09-28 に追加）はまだ実機で動かしていない。BtHelper の書き方（メタデータのキーと値の形、書いてから知らせる順番）は
+Evolution X 11 が取り込んでいる BtHelper（TheParasiteProject/packages_apps_BtHelper の main）のソースで、
+`IBluetooth#getMetadata` の引数と権限の確かめ方、shell が `BLUETOOTH_PRIVILEGED` を持つことは LineageOS 23.0（Android 16）のソースで確かめ、
+メタデータの読み方は JVM のテストで確かめた。実機では次を確かめる: AirPods をつなぐと電池リングが出る（設定の AirPods の画面の左右の低い方と同じ値）、
+Shizuku が動いていればタップで左・右・ケースが開き、設定の AirPods の画面と同じ値になる、`verify-on-device.sh` の「Shizuku」の段で
+`earbuds=` に AirPods の内訳が出る。
+
 ## できないこと（Android の制約）
 
 - 島が横に広がると、その下にあるステータスバーのアイコンは隠れる（root なしではアイコンをずらせない。
@@ -333,5 +368,7 @@ Compose 以外のソースを API 37 のフレームワーク（Robolectric の 
 - 省電力をアプリから入れ・切りするには adb での許可か Shizuku が要る（普通のアプリには切り替える権限がない）。充電中はオンにできない
 - 島ではなく設定画面やクイック設定で手動で入れた省電力は、Shizuku が無いとアプリからは切れない（島のボタンは設定画面を開く）
 - Shizuku なしで島から入れている間は、設定の「スケジュールの設定」に「残量 ○% でオン」が出る（切れると元に戻る）
-- イヤホンの電池残量は機種の組み合わせによって取れない
+- イヤホンの電池残量は機種の組み合わせによって取れない（Evolution X の AirPods は BtHelper から取れる）。
+  左右とケースの内訳は、それを書くシステムアプリ（Evolution X の BtHelper）と Shizuku があるときだけ出せる
+  （読むのに `BLUETOOTH_PRIVILEGED` が要る）
 - フォントは SF Pro ではなく端末の標準フォント（SF Pro は再配布できない）
