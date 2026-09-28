@@ -73,7 +73,11 @@ class ShellCommandReceiver : BroadcastReceiver() {
             "statusbar" -> {
                 val rect = context.getSystemService(DisplayManager::class.java).getDisplay(Display.DEFAULT_DISPLAY)
                     ?.cutout?.boundingRectTop?.toShortString()
-                Log.i(TAG, "statusbar=${g.statusBarGap.state.value} on=${g.settings.value.shiftStatusBar} cutout=$rect")
+                Log.i(
+                    TAG,
+                    "statusbar=${g.statusBarGap.state.value} on=${g.settings.value.shiftStatusBar} cutout=$rect " +
+                        "lockscreenPending=${g.statusBarGap.lockScreenPending.value}",
+                )
             }
         }
         Log.i(TAG, "cmd=${args.joinToString(" ")} state=${describe()}")

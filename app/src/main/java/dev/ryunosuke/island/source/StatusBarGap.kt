@@ -1,8 +1,13 @@
 package dev.ryunosuke.island.source
 
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.Point
 import android.hardware.display.DisplayManager
+import android.media.AudioManager
+import android.os.PowerManager
 import android.util.Log
 import android.view.Display
 import android.view.Surface
@@ -42,8 +47,13 @@ import kotlin.math.roundToInt
  *
  * 状態は端末の本当の値（[Display.getCutout] の上端の矩形）と比べて決める。違っていたら作り直し、
  * 10 秒たっても変わらなければ overlay を切って諦める（同じ中身では、スイッチを入れ直すまで試さない）。
+ *
+ * ロック画面のステータスバー（SystemUI の KeyguardStatusBarView）は、カメラ穴に合わせた並びを最初の 1 回しか作らず、
+ * あとで穴の幅が変わっても古い幅のまま残る（Android 16。ホーム画面のステータスバーは付いてくる）。
+ * なので空きを変えたら、そのときの SystemUI を覚えておき、次に画面が消えたときに root で再起動して作り直させる
+ * （画面が点いているうちに再起動すると、画面上部がちらついてロックもかかるので）。
  */
-class StatusBarGap(private val app: Context, scope: CoroutineScope, settings: StateFlow<IslandSettings>) {
+class StatusBarGap(private val app: Context, private val scope: CoroutineScope, settings: StateFlow<IslandSettings>) {
 
     sealed interface State {
         /** スイッチが切れていて、何も上書きしていない */
@@ -77,7 +87,27 @@ class StatusBarGap(private val app: Context, scope: CoroutineScope, settings: St
     /** 最後に作った overlay の中身（同じものを何度も作らない） */
     private var sentSpec: String? = null
 
+    private val _lockScreenPending = MutableStateFlow(prefs.getInt(KEY_STALE_SYSTEMUI_PID, 0) > 0)
+
+    /** ロック画面のステータスバーがまだ古い幅のまま（次に画面が消えたとき、SystemUI を再起動して作り直す） */
+    val lockScreenPending: StateFlow<Boolean> get() = _lockScreenPending
+
     init {
+        // 画面が消えたら、少し待ってまだ消えていれば作り直す（すぐ点け直したときは次の機会に）
+        app.registerReceiver(
+            object : BroadcastReceiver() {
+                override fun onReceive(context: Context, intent: Intent) {
+                    scope.launch {
+                        delay(SCREEN_OFF_DELAY_MS)
+                        if (!app.getSystemService(PowerManager::class.java).isInteractive) {
+                            runCatching { refreshLockScreen() }.onFailure { Log.w(TAG, "SystemUI を作り直せない", it) }
+                        }
+                    }
+                }
+            },
+            IntentFilter(Intent.ACTION_SCREEN_OFF),
+            Context.RECEIVER_EXPORTED,
+        )
         scope.launch {
             combine(settings, host, ShizukuShell.changes) { s, h, _ -> s to h }
                 // スライダーを動かしている間は待つ（作り直すたびに、開いているアプリの画面が作り直される）
@@ -126,6 +156,8 @@ class StatusBarGap(private val app: Context, scope: CoroutineScope, settings: St
             sentSpec = want.spec
             prefs.edit { putBoolean(KEY_APPLIED, true) }
             _state.value = State.Applied(want.widthDp)
+            // 前の版で空けたときは、ロック画面のステータスバーが古い幅のまま残っていることがあるので、一度だけ作り直す
+            if (!prefs.getBoolean(KEY_LOCKSCREEN_CHECKED, false) && ShizukuShell.isReady()) markLockScreenStale()
             return
         }
 
@@ -154,6 +186,8 @@ class StatusBarGap(private val app: Context, scope: CoroutineScope, settings: St
             sentSpec = want.spec
             // 作りかけで落ちても、あとで切れるように先に（同期で）覚えておく
             prefs.edit(commit = true) { putBoolean(KEY_APPLIED, true) }
+            // 今の SystemUI のロック画面は、これから変える前の幅で並んだまま残る
+            markLockScreenStale()
             val error = withContext(shizuku) {
                 runCatching {
                     // 同じ名前で作り直すと中身だけ入れ替わる（有効なままなら、そのまま効く）。0x03 は TypedValue.TYPE_STRING
@@ -184,7 +218,7 @@ class StatusBarGap(private val app: Context, scope: CoroutineScope, settings: St
             putString(KEY_FAILED_REASON, reason)
         }
         sentSpec = null
-        if (disable()) prefs.edit { putBoolean(KEY_APPLIED, false) }
+        if (disable() != null) prefs.edit { putBoolean(KEY_APPLIED, false) }
         _state.value = State.Failed(reason)
     }
 
@@ -200,10 +234,13 @@ class StatusBarGap(private val app: Context, scope: CoroutineScope, settings: St
             _state.value = State.Off
             return
         }
-        if (!disable()) {
+        val existed = disable()
+        if (existed == null) {
             _state.value = if (applied) State.CannotRestore else State.Off
             return
         }
+        // 切った overlay があった（前に入れていた Island が残したもの・切ったままのものも含む）なら、ロック画面も戻す
+        if (existed) markLockScreenStale()
         prefs.edit {
             putBoolean(KEY_APPLIED, false)
             putBoolean(KEY_CHECKED, true)
@@ -212,15 +249,56 @@ class StatusBarGap(private val app: Context, scope: CoroutineScope, settings: St
     }
 
     /**
-     * overlay を切る（切るのは root でなくてもできる）。一度も作っていなければシステムに断られるが、
-     * それも「残っていない」とみなす。Shizuku が使えず確かめられなかったときだけ false
+     * overlay を切る（切るのは root でなくてもできる）。true は overlay があった、false は無かった
+     * （一度も作っていなければシステムに断られる）。Shizuku が使えず確かめられなかったときは null
      */
-    private suspend fun disable(): Boolean = withContext(shizuku) {
-        if (!ShizukuShell.isReady()) return@withContext false
-        runCatching { ShizukuShell.exec("cmd", "overlay", "disable", "--user", "0", OVERLAY) }
+    private suspend fun disable(): Boolean? = withContext(shizuku) {
+        if (!ShizukuShell.isReady()) return@withContext null
+        val existed = runCatching { ShizukuShell.exec("cmd", "overlay", "disable", "--user", "0", OVERLAY) }
             .onFailure { Log.i(TAG, "overlay を切れない（作っていなければ問題ない）: ${it.message}") }
-        ShizukuShell.isReady()
+            .isSuccess
+        if (ShizukuShell.isReady()) existed else null
     }
+
+    /** 今動いている SystemUI を「ロック画面のステータスバーが古い」と覚える（次に画面が消えたとき再起動する） */
+    private suspend fun markLockScreenStale() {
+        val pid = withContext(shizuku) { runCatching { systemUiPid() }.getOrNull() } ?: return
+        prefs.edit {
+            putInt(KEY_STALE_SYSTEMUI_PID, pid)
+            putBoolean(KEY_LOCKSCREEN_CHECKED, true)
+        }
+        _lockScreenPending.value = true
+    }
+
+    /**
+     * 覚えた SystemUI がまだ動いていれば再起動する（SystemUI は落ちるとすぐに立ち上がり直し、ロック画面も今のカメラ穴で並べ直す）。
+     * 端末の再起動などですでに入れ替わっていれば何もしない。root の Shizuku が無い・通話中なら、次に画面が消えたときに回す
+     */
+    private suspend fun refreshLockScreen() {
+        val stale = prefs.getInt(KEY_STALE_SYSTEMUI_PID, 0)
+        if (stale <= 0 || !ShizukuShell.isRoot()) return
+        if (app.getSystemService(AudioManager::class.java).mode != AudioManager.MODE_NORMAL) return
+        val done = withContext(shizuku) {
+            val pid = runCatching { systemUiPid() }.getOrNull() ?: return@withContext false
+            if (pid != stale) return@withContext true
+            Log.i(TAG, "ロック画面のステータスバーを作り直すため SystemUI（$pid）を再起動する")
+            runCatching { ShizukuShell.exec("kill", pid.toString()) }
+            // 普通は SIGTERM で落ちる。同じプロセスが残っていたら強制的に止める
+            delay(KILL_CHECK_MS)
+            if (runCatching { systemUiPid() }.getOrNull() == pid) {
+                runCatching { ShizukuShell.exec("kill", "-9", pid.toString()) }
+                delay(KILL_CHECK_MS)
+            }
+            runCatching { systemUiPid() }.getOrNull() != pid
+        }
+        if (done) {
+            prefs.edit { remove(KEY_STALE_SYSTEMUI_PID) }
+            _lockScreenPending.value = false
+        }
+    }
+
+    /** SystemUI のプロセス番号。Shizuku のスレッドで呼ぶ */
+    private fun systemUiPid(): Int? = parsePid(ShizukuShell.exec("pidof", SYSTEMUI))
 
     /**
      * 空ける矩形。[halfPx]・[bottomPx] は設定値の画素（いちばん解像度の高いモード）で、[ratio] は画面の画素 1 つあたりのその画素数。
@@ -261,14 +339,25 @@ class StatusBarGap(private val app: Context, scope: CoroutineScope, settings: St
         const val OVERLAY = "com.android.shell:$NAME"
         private const val RESOURCE = "android:string/config_mainBuiltInDisplayCutoutRectApproximation"
 
+        private const val SYSTEMUI = "com.android.systemui"
+
         private const val SETTLE_MS = 1_500L
         private const val VERIFY_MS = 10_000L
         private const val POLL_MS = 250L
         private const val TOLERANCE_PX = 3
 
+        /** 画面が消えてから SystemUI を再起動するまで（消えるときの処理を邪魔しない・すぐ点け直したら見送る） */
+        private const val SCREEN_OFF_DELAY_MS = 1_500L
+        private const val KILL_CHECK_MS = 1_000L
+
         private const val KEY_APPLIED = "applied"
         private const val KEY_CHECKED = "checked"
         private const val KEY_FAILED_SPEC = "failed_spec"
         private const val KEY_FAILED_REASON = "failed_reason"
+        private const val KEY_STALE_SYSTEMUI_PID = "stale_systemui_pid"
+        private const val KEY_LOCKSCREEN_CHECKED = "lockscreen_checked"
+
+        /** `pidof` の出力（空白区切りのプロセス番号）の最初の 1 つ */
+        fun parsePid(out: String): Int? = out.trim().split(Regex("\\s+")).firstOrNull()?.toIntOrNull()?.takeIf { it > 0 }
     }
 }

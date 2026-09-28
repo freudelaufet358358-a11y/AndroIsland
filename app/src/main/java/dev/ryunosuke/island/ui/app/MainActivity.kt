@@ -273,6 +273,14 @@ private fun MainScreen() {
                 statusBarGapText(gap, settings.shiftStatusBar)?.let {
                     Text(it, color = Color.White, fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp))
                 }
+                val lockScreenPending by g.statusBarGap.lockScreenPending.collectAsState()
+                if (lockScreenPending) {
+                    Text(
+                        "ロック画面のステータスバーは、次に画面を消したときに今の幅に合わせます" +
+                            "（ロック画面は最初の並びのまま変わらないので、画面が消えている間にシステムの画面表示を再起動します）。",
+                        color = IslandColors.Secondary, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp),
+                    )
+                }
                 if (settings.shiftStatusBar) {
                     Text(
                         "アンインストールする前にスイッチを切ってください（切らずに消したときは、入れ直して Shizuku の使用を許可すると元に戻ります）。",

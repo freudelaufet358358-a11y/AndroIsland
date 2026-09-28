@@ -22,6 +22,14 @@ class StatusBarGapTest {
         assertTrue(gap.isWellFormed())
     }
 
+    @Test fun readsSystemUiPidFromPidof() {
+        assertEquals(1234, StatusBarGap.parsePid("1234\n"))
+        // 同じ名前が複数あれば最初の 1 つ
+        assertEquals(1234, StatusBarGap.parsePid("1234 5678\n"))
+        assertEquals(null, StatusBarGap.parsePid(""))
+        assertEquals(null, StatusBarGap.parsePid("0"))
+    }
+
     @Test fun emptyRectangleIsNeverSent() {
         // システムの中で読まれる値なので、中身の無い矩形は送らない
         assertFalse(StatusBarGap.Gap(0, 132, 1f, d).isWellFormed())
