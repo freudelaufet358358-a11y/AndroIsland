@@ -51,11 +51,11 @@ class IslandMetricsTest {
     }
 
     @Test fun statusBarGapHugsCompactIsland() {
-        val m = metrics()
-        // コンパクト（左右に絵。音楽など）がちょうど入り、両端に隙間 1 つ分
+        // 待機時の幅を 62dp に縮めると、音楽のコンパクトは約 136dp。空きはそれに島の端とアイコンの隙間 2 つ分を足した約 151dp
+        val m = metrics(IslandSettings(centerWidthDp = 62f))
         assertEquals(m.compactWidth(m.glyph + m.sidePad) / 2 + m.detachedGap, m.statusBarGapHalf(0f, 0f), 0.01f)
-        // Pixel 6a の既定の大きさでは約 221dp（両脇に 95dp ずつ残る）
-        assertEquals(221f, 2 * m.statusBarGapHalf(0f, 0f) / d, 1f)
+        assertEquals(151f, 2 * m.statusBarGapHalf(0f, 0f) / d, 1f)
+        assertEquals(0f, m.compactOverStatusBar(0f, 0f), 0.01f)
     }
 
     @Test fun statusBarGapShrinksWithShortIsland() {
@@ -66,24 +66,55 @@ class IslandMetricsTest {
         assertEquals(121f, compact / d, 1f)
         assertEquals(compact / 2 + m.detachedGap, m.statusBarGapHalf(0f, 0f), 0.01f)
         assertEquals(136f, 2 * m.statusBarGapHalf(0f, 0f) / d, 1f)
-        assertTrue(m.statusBarGapHalf(0f, 0f) < metrics().statusBarGapHalf(0f, 0f))
+        assertTrue(m.statusBarGapHalf(0f, 0f) < metrics(IslandSettings(centerWidthDp = 62f)).statusBarGapHalf(0f, 0f))
     }
 
     @Test fun statusBarGapFollowsFixedCompactWidthAndOffset() {
-        // コンパクトを広くすれば、それが入る幅
-        val wide = metrics(IslandSettings(compactWidthDp = 280f))
-        assertEquals(280f * d / 2 + wide.detachedGap, wide.statusBarGapHalf(0f, 0f), 0.5f)
+        // コンパクトを決めた幅にすれば、それが入る幅
+        val fixed = metrics(IslandSettings(compactWidthDp = 140f))
+        assertEquals(140f * d / 2 + fixed.detachedGap, fixed.statusBarGapHalf(0f, 0f), 0.5f)
         // 島を右にずらすと、空き（画面の中央に置かれる）もその分広がる
-        val shifted = metrics(IslandSettings(offsetXDp = 10f))
-        assertEquals(metrics().statusBarGapHalf(0f, 0f) + 10f * d, shifted.statusBarGapHalf(0f, 0f), 0.5f)
+        val short = IslandSettings(centerWidthDp = 47f)
+        val shifted = metrics(short.copy(offsetXDp = 10f))
+        assertEquals(metrics(short).statusBarGapHalf(0f, 0f) + 10f * d, shifted.statusBarGapHalf(0f, 0f), 0.5f)
+    }
+
+    @Test fun statusBarGapLeavesRoomForMinimumIcons() {
+        // Pixel 6a の既定の文字サイズでは、両脇に 126dp ずつ残して 159dp まで
+        val cap = IslandMetrics.maxStatusBarGapDp(1080 / d, 1f)
+        assertEquals(159f, cap, 1f)
+        val half = cap * d / 2
+        // 171dp 空けたときのスクリーンショット（px）で、時計「14:14」のあとの通知アイコンの枠（58px）は 138.5px から並ぶ。
+        // 2 つと「•」の場所の 3 枠に、「1」より幅の広い数字だけの時刻の分（16px）を足しても入る
+        assertTrue(540 - half >= 138.5f + 3 * 58f + 16f)
+        // 右は 5G が 806px から。その手前に、ほかのアイコンをまとめた「•」の場所（アイコン 1 つ分、約 47px）が残る
+        assertTrue(540 + half + 47f <= 806f)
+        // 文字を大きくすると、時計とアイコンも大きくなるので狭くなる
+        assertTrue(IslandMetrics.maxStatusBarGapDp(1080 / d, 1.3f) < cap - 40f)
+    }
+
+    @Test fun statusBarGapKeepsIconRoomOverCompactIsland() {
+        // 既定の大きさのコンパクト（約 206dp）は入れきらない。アイコンの場所を残し、コンパクトの方が被る
+        val m = metrics()
+        val half = IslandMetrics.maxStatusBarGapDp(1080 / d, 1f) * d / 2
+        assertEquals(half, m.statusBarGapHalf(0f, 0f), 0.5f)
+        assertEquals(m.compactReach - half, m.compactOverStatusBar(0f, 0f), 0.5f)
+        assertEquals(23f, m.dp(m.compactOverStatusBar(0f, 0f)), 1f)
+        // 手で決めた幅も同じ
+        assertEquals(half, m.statusBarGapHalf(200f, 0f), 0.5f)
+        // 文字が大きいと、残す場所も広い
+        val big = IslandMetrics.from(info.copy(fontScale = 1.3f), IslandSettings())
+        assertTrue(big.statusBarGapHalf(0f, 0f) < half)
     }
 
     @Test fun statusBarGapSettingIsClampedToCameraAndScreen() {
         val m = metrics()
-        assertEquals(200f * d / 2, m.statusBarGapHalf(200f, 0f), 0.01f)
-        // カメラ穴は必ず覆い、両脇に画面幅の 1/8 は残す
+        assertEquals(150f * d / 2, m.statusBarGapHalf(150f, 0f), 0.01f)
+        // カメラ穴は必ず覆う
         assertEquals(100f, m.statusBarGapHalf(50f, 100f), 0.01f)
-        assertEquals(1080f * 3 / 8, m.statusBarGapHalf(1000f, 0f), 0.01f)
+        // 広い画面でも、両脇に画面幅の 1/8 は残す
+        val wide = IslandMetrics.from(HostInfo(widthPx = 3000, statusBarPx = 100, density = 2f), IslandSettings())
+        assertEquals(3000f * 3 / 8, wide.statusBarGapHalf(1400f, 0f), 0.01f)
     }
 
     @Test fun cameraBottomIsMeasuredFromIslandTop() {

@@ -193,6 +193,7 @@ class OverlayHost(
             cornerRadiusPx = corner,
             statusBarPx = sb,
             density = context.resources.displayMetrics.density,
+            fontScale = context.resources.configuration.fontScale,
         )
         if (next != hostInfo.value) hostInfo.value = next
         onStatusBarsVisible(insets.isVisible(WindowInsets.Type.statusBars()))

@@ -257,18 +257,32 @@ private fun MainScreen() {
                 )
                 SwitchRow("時計とアイコンを島の外に出す", settings.shiftStatusBar) { v -> update { it.copy(shiftStatusBar = v) } }
                 if (settings.shiftStatusBar) {
+                    // 左に時計と通知アイコン 2 つ、右に 5G・アンテナ・電池が入る幅までしか空けない
+                    val maxGapDp = IslandMetrics.maxStatusBarGapDp(screenDp, context.resources.configuration.fontScale)
                     // 変えるたびにアプリの画面が作り直されるので、指を離したときだけ変える
                     AutoSizeRow(
                         "空ける幅",
                         settings.statusBarGapDp,
-                        IslandMetrics.idleWidthDp(screenDp, settings).coerceAtMost(screenDp * 0.75f - 1f)..screenDp * 0.75f,
+                        IslandMetrics.idleWidthDp(screenDp, settings).coerceAtMost(maxGapDp - 1f)..maxGapDp,
                         commitOnRelease = true,
                     ) { v -> update { it.copy(statusBarGapDp = v) } }
                     Text(
                         "自動は、音楽などのコンパクトがちょうど入る幅です（島の幅を変えると空きも合わせて変わります）。" +
-                            "2 つ同時の右の丸や、タイマーのように文字の多いものは、右のアイコンに少し被ります。",
+                            "2 つ同時の右の丸や、タイマーのように文字の多いものは、右のアイコンに少し被ります。" +
+                            "左に時計と通知アイコン 2 つ、右に 5G・アンテナ・電池がいつも入るように、${maxGapDp.roundToInt()} dp より広くは空けません" +
+                            "（入りきらないアイコンは「•」にまとまります）。",
                         color = IslandColors.Secondary, fontSize = 12.sp,
                     )
+                    // コンパクトの方が広いときは、アイコンの場所を残すので、コンパクトが出ている間は内側のアイコンに被る
+                    val host by g.statusBarGap.host.collectAsState()
+                    val overDp = host?.let { h -> IslandMetrics.from(h, settings).let { it.dp(it.compactOverStatusBar(settings.statusBarGapDp, 0f)) } } ?: 0f
+                    if (overDp >= 1f) {
+                        Text(
+                            "今の島の大きさでは、音楽などのコンパクトが空きから片側 ${overDp.roundToInt()} dp はみ出し、" +
+                                "出ている間は内側のアイコンに被ります（「待機時の幅」を狭めると収まります）。",
+                            color = IslandColors.Secondary, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp),
+                        )
+                    }
                 }
                 statusBarGapText(gap, settings.shiftStatusBar)?.let {
                     Text(it, color = Color.White, fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp))

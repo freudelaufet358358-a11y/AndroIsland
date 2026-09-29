@@ -14,12 +14,20 @@ class StatusBarGapTest {
     private val m = IslandMetrics.from(HostInfo(widthPx = 1080, statusBarPx = 132, density = d), IslandSettings())
 
     @Test fun specIsCenteredRectangleKeepingHeight() {
-        val gap = StatusBarGap.Gap.of(m, 0f, 200f, 132, 1080)
-        // 200dp = 525px → 半分 262.5 を丸めて 263
-        assertEquals("M -263,0 H 263 V 132 H -263 Z", gap.spec)
-        assertEquals(526f, gap.widthPx, 0.01f)
-        assertEquals(200, gap.widthDp)
+        val gap = StatusBarGap.Gap.of(m, 0f, 144f, 132, 1080)
+        // 144dp = 378px → 半分 189
+        assertEquals("M -189,0 H 189 V 132 H -189 Z", gap.spec)
+        assertEquals(378f, gap.widthPx, 0.01f)
+        assertEquals(144, gap.widthDp)
         assertTrue(gap.isWellFormed())
+    }
+
+    @Test fun neverCrowdsOutTheMinimumIcons() {
+        // 自動（既定の島なら 221dp）も、手で決めた広い幅も、通知アイコン 2 つと 5G・アンテナ・電池が入る 159dp まで
+        val auto = StatusBarGap.Gap.of(m, 0f, 0f, 132, 1080)
+        assertEquals(159, auto.widthDp)
+        assertEquals(auto.spec, StatusBarGap.Gap.of(m, 0f, 250f, 132, 1080).spec)
+        assertTrue(auto.isWellFormed())
     }
 
     @Test fun readsSystemUiPidFromPidof() {
@@ -37,20 +45,20 @@ class StatusBarGapTest {
     }
 
     @Test fun matchesOnlyTheReportedGap() {
-        val gap = StatusBarGap.Gap.of(m, 0f, 200f, 132, 1080)
-        assertTrue(gap.matches(526, 132))
-        assertTrue(gap.matches(524, 131))
+        val gap = StatusBarGap.Gap.of(m, 0f, 144f, 132, 1080)
+        assertTrue(gap.matches(378, 132))
+        assertTrue(gap.matches(376, 131))
         // 端末の元の矩形（幅 145px）
         assertFalse(gap.matches(145, 132))
         // 高さが違う
-        assertFalse(gap.matches(526, 150))
+        assertFalse(gap.matches(378, 150))
     }
 
     @Test fun specIsWrittenInPixelsOfTheLargestMode() {
         // 1440px のパネルを 1080px で使っているとき、設定値は 1440px の画素で書く（システムが 1080px に縮める）
-        val gap = StatusBarGap.Gap.of(m, 0f, 200f, 132, 1440)
-        assertEquals("M -350,0 H 350 V 176 H -350 Z", gap.spec)
-        assertEquals(525f, gap.widthPx, 0.01f)
-        assertTrue(gap.matches(525, 132))
+        val gap = StatusBarGap.Gap.of(m, 0f, 144f, 132, 1440)
+        assertEquals("M -252,0 H 252 V 176 H -252 Z", gap.spec)
+        assertEquals(378f, gap.widthPx, 0.01f)
+        assertTrue(gap.matches(378, 132))
     }
 }

@@ -13,6 +13,8 @@ data class HostInfo(
     val cornerRadiusPx: Int = 0,
     val statusBarPx: Int = 0,
     val density: Float = 1f,
+    /** 文字の大きさ（ステータスバーの時計とアイコンは、これに合わせて大きくなる） */
+    val fontScale: Float = 1f,
 )
 
 /**
@@ -46,6 +48,7 @@ data class IslandMetrics(
     /** 2 つ同時のとき、右に離れる島の幅と、主の島との隙間 */
     val detachedWidth: Float,
     val detachedGap: Float,
+    val fontScale: Float = 1f,
 ) {
     val top get() = cy - height / 2
     val expandedWidth get() = width - margin * 2
@@ -68,24 +71,30 @@ data class IslandMetrics(
         return maxOf(fixedCompactWidth, sensorWidth, holeRadius * 2 + sidePad + 2 * edge)
     }
 
+    /** ふだん出ているコンパクト（左右に絵を置いた形。音楽など）の外側の端の、画面の中央からの距離 */
+    val compactReach get() = compactWidth(glyph + sidePad) / 2 + abs(cx - width / 2)
+
     /**
      * ステータスバーの真ん中に空ける幅の半分（画面の中央から片側）。
-     * [gapDp] が 0（自動）なら、ふだん出ているコンパクト（左右に絵を置いた形。音楽など）がちょうど入り、
+     * [gapDp] が 0（自動）なら、ふだん出ているコンパクトがちょうど入り、
      * 島の端とアイコンの間に [detachedGap] だけ隙間が残る幅。ステータスバーは空きを画面の中央に置くので、
      * 島を左右にずらしていればその分も広げる。
      * 2 つ同時の右に離れた丸・文字の多いコンパクト（タイマーの残り時間など）・展開した島は入れない
      * （丸は島の高さで決まる大きさなので、島を短くしたときに空きが島よりずっと広くなってしまう）。
-     * どちらでも、カメラ穴（中央から [holeHalf] まで）は覆い、両脇に画面幅の 1/8 ずつは残す
+     * どちらでも、両脇には時計・通知アイコン 2 つと 5G・アンテナ・電池の分（[maxStatusBarGapDp]）を残す。
+     * コンパクトがそれより広いときは、アイコンの方を残す（コンパクトが出ている間は、内側のアイコンに被る）。
+     * カメラ穴（中央から [holeHalf] まで）は覆い、両脇に画面幅の 1/8 ずつは残す
      * （空きが画面の端に届くと、システムがカメラ穴を角にあるものとみなし、真ん中を空けなくなる）
      */
     fun statusBarGapHalf(gapDp: Float, holeHalf: Float): Float {
-        val half = if (gapDp > 0f) {
-            gapDp * density / 2
-        } else {
-            compactWidth(glyph + sidePad) / 2 + abs(cx - width / 2) + detachedGap
-        }
-        return half.coerceAtLeast(holeHalf).coerceAtMost(width * 3 / 8)
+        val half = if (gapDp > 0f) gapDp * density / 2 else compactReach + detachedGap
+        return half.coerceAtMost(maxStatusBarGapDp(width / density, fontScale) * density / 2)
+            .coerceAtLeast(holeHalf)
+            .coerceAtMost(width * 3 / 8)
     }
+
+    /** コンパクトが空きからはみ出して、ステータスバーのアイコンに被る幅（片側）。収まっていれば 0 */
+    fun compactOverStatusBar(gapDp: Float, holeHalf: Float) = (compactReach - statusBarGapHalf(gapDp, holeHalf)).coerceAtLeast(0f)
 
     companion object {
         /** iPhone の島の高さ 37.33pt ÷ 画面幅 393pt */
@@ -96,6 +105,32 @@ data class IslandMetrics(
 
         /** 展開したときの幅の下限。音楽の操作ボタン（中央の 3 つ）と右端の出力先ボタンが重ならない幅 */
         const val MIN_EXPANDED_WIDTH_DP = 330f
+
+        /*
+         * ステータスバーの両脇に必ず残す幅。時計とアイコンは文字の大きさに合わせて大きくなるので sp、余白は dp。
+         * Pixel 6a（Android 16、表示サイズ・文字サイズは既定）で 171dp 空けたときのスクリーンショットで測った。
+         * - 左: 画面の端から時計まで 18dp。時計と、通知アイコンの手前まで 42sp（「14:14」で 35sp。
+         *   「1」は細いので、幅の広い数字だけの時刻の分を足した）。通知アイコンの枠 22sp を 3 つ分
+         *   （2 つ目のあとにまだアイコンがあると、システムはそこに「•」を置く場所が無ければ 2 つ目も「•」にまとめる）
+         * - 右: アンテナと電池の間・電池から画面の端まで 36dp。電池 26sp、5G とアンテナ 43sp、ほかのアイコンをまとめた「•」の場所 20sp
+         *   （並びきらないアイコンがあると、システムは左端に「•」の場所を取ってから並べるので、それが無いと 5G とアンテナも「•」になる）
+         */
+        private const val STATUS_BAR_START_DP = 18f
+        private const val STATUS_BAR_START_SP = 42f + 3 * 22f
+        private const val STATUS_BAR_END_DP = 36f
+        private const val STATUS_BAR_END_SP = 26f + 43f + 20f
+
+        /** ステータスバーの片側に残す幅（dp）。空きは画面の中央に置かれるので、左右の広い方を両側に残す */
+        fun statusBarSideDp(fontScale: Float): Float =
+            maxOf(STATUS_BAR_START_DP + STATUS_BAR_START_SP * fontScale, STATUS_BAR_END_DP + STATUS_BAR_END_SP * fontScale)
+
+        /**
+         * ステータスバーの真ん中に空けられるいちばん広い幅（dp）。左に時計と通知アイコン 2 つ、右に 5G・アンテナ・電池が入る
+         * （入りきらないアイコンは「•」にまとまる）。Pixel 6a の既定の文字サイズで 159dp。
+         * 広い画面でも、両脇に画面幅の 1/8 ずつは残す（[statusBarGapHalf]）
+         */
+        fun maxStatusBarGapDp(screenWidthDp: Float, fontScale: Float): Float =
+            minOf(screenWidthDp - 2 * statusBarSideDp(fontScale), screenWidthDp * 0.75f)
 
         /** 待機時の島の幅の目安（dp）。設定画面のスライダーに使う（カメラ穴の大きさは見ないので、実際と少しずれうる） */
         fun idleWidthDp(screenWidthDp: Float, s: IslandSettings): Float =
@@ -139,6 +174,7 @@ data class IslandMetrics(
                 // 映像: 右の島は 1.2H × 1.0H、隙間 0.19H（画角の縮みを補正した値）
                 detachedWidth = h * 1.2f,
                 detachedGap = h * 0.19f,
+                fontScale = info.fontScale,
             )
         }
     }
