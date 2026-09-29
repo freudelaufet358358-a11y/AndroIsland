@@ -137,6 +137,43 @@ class NotificationParserTest {
         assertEquals("右折して 国道1号線", a.instruction)
     }
 
+    @Test fun googleMapsNavigationWithoutCategory() {
+        // Google マップの案内中の通知: カテゴリなし、題名に距離、本文に案内、サブテキストに「残り時間 · 残りの距離 · 到着」。
+        // 数と単位の間・区切りの前は改行しない空白
+        val s = snap("com.google.android.apps.maps").copy(
+            ongoing = true, title = "4.3\u00A0km", text = "右折する", subText = "13 分\u00A0· 12\u00A0km\u00A0· 18:33 到着",
+        )
+        val a = NotificationParser.parse(s, o) as NavigationActivity
+        assertEquals("4.3\u00A0km", a.distance)
+        assertEquals("右折する", a.instruction)
+        assertEquals("13 分 · 12 km · 18:33 到着", a.detail)
+        // 設定でナビを切っていれば出さない（その他の進行中のものにも回さない）
+        assertNull(NotificationParser.parse(s, o.copy(navigation = false)))
+    }
+
+    @Test fun googleMapsOtherOngoingIsNotNavigation() {
+        // 現在地の共有などは「·」区切りの 3 つを持たない
+        val s = snap("com.google.android.apps.maps").copy(ongoing = true, title = "現在地を共有しています", text = "山田さん", subText = "マップ")
+        assertNull(NotificationParser.parse(s, o))
+    }
+
+    @Test fun navigationLiveUpdateUsesShortCriticalText() {
+        // Android 16 の Live Updates の形（距離は状態バーのチップ用の短い文字）
+        val s = snap("com.example.nav").copy(
+            category = "navigation", ongoing = true, promoted = true, title = "右折する", text = "国道1号線", shortCriticalText = "300 m",
+        )
+        val a = NotificationParser.parse(s, o) as NavigationActivity
+        assertEquals("300 m", a.distance)
+        assertEquals("右折する", a.instruction)
+    }
+
+    @Test fun minutesAndMegabytesAreNotDistances() {
+        val s = snap("com.example.nav").copy(category = "navigation", ongoing = true, title = "15 min で到着", text = "12 MB を使用")
+        val a = NotificationParser.parse(s, o) as NavigationActivity
+        assertNull(a.distance)
+        assertEquals("15 min で到着", a.instruction)
+    }
+
     @Test fun downloadProgressIsLive() {
         val s = snap("com.android.providers.downloads").copy(ongoing = true, title = "file.zip", progress = 42, progressMax = 100)
         val a = NotificationParser.parse(s, o) as LiveActivity

@@ -100,7 +100,7 @@ object NotificationParser {
         if (s.groupSummary || s.isMedia || s.packageName == o.ownPackage) return null
         if (isCall(s)) return if (o.calls) parseCall(s) else null
         if (isClockish(s)) return if (o.clock) parseClock(s) else null
-        if (s.category == CATEGORY_NAVIGATION) return if (o.navigation) parseNavigation(s) else null
+        if (isNavigation(s)) return if (o.navigation) parseNavigation(s) else null
         if (!o.otherLive || s.packageName in o.excludedPackages) return null
         return parseLive(s)
     }
@@ -241,17 +241,30 @@ object NotificationParser {
 
     // ---- ナビ ----
 
+    /**
+     * Google マップの案内中の通知はカテゴリを付けない。題名に曲がるまでの距離、本文に案内、
+     * サブテキストに「13 分 · 4.6 km · 11:55 到着」のような「·」区切りの 3 つを入れてくる
+     * （現在地の共有などマップのほかの通知には無い）
+     */
+    private fun isNavigation(s: NotificationSnapshot) =
+        s.category == CATEGORY_NAVIGATION || (s.packageName == GOOGLE_MAPS && tripParts(s.subText).size >= 3)
+
+    /** 「13 分 · 4.6 km · 11:55 到着」を区切ったもの（区切りの前後の空白は改行しない空白のこともある） */
+    private fun tripParts(text: String?): List<String> =
+        text?.split('·', '・', '•')?.map { it.replace(NBSP, " ").trim() }?.filter { it.isNotEmpty() }.orEmpty()
+
     private fun parseNavigation(s: NotificationSnapshot): NavigationActivity? {
-        val title = s.title ?: s.text ?: return null
-        val distance = s.shortCriticalText ?: title.takeIf { DISTANCE.containsMatchIn(it) && it.length <= 12 }
-        val instruction = if (distance == title) s.text ?: title else title
+        val title = s.title?.takeIf { it.isNotBlank() } ?: s.text?.takeIf { it.isNotBlank() } ?: return null
+        val distance = s.shortCriticalText?.takeIf { it.isNotBlank() } ?: title.takeIf { DISTANCE.containsMatchIn(it) && it.length <= 12 }
+        val instruction = if (distance == title) s.text?.takeIf { it.isNotBlank() } ?: title else title
+        val trip = tripParts(s.subText)
         return NavigationActivity(
             key = s.key,
             packageName = s.packageName,
             maneuver = s.largeIcon,
             distance = distance ?: DISTANCE.find(title)?.value,
             instruction = instruction,
-            detail = s.subText ?: s.text?.takeIf { it != instruction },
+            detail = trip.joinToString(" · ").ifEmpty { null } ?: s.text?.takeIf { it != instruction },
             open = contentTarget(s),
         )
     }
@@ -305,7 +318,11 @@ object NotificationParser {
     private val TIMER_WORDS = listOf("タイマー", "timer", "時間です", "time's up", "times up")
     private fun looksLike(text: String, words: List<String>) = words.any { text.contains(it, ignoreCase = true) }
 
-    private val DISTANCE = Regex("""\d+(?:[.,]\d+)?\s?(?:km|m|mi|ft|キロ|メートル)""", RegexOption.IGNORE_CASE)
+    private const val GOOGLE_MAPS = "com.google.android.apps.maps"
+    private val NBSP = Regex("[\u00A0\u202F]")
+
+    /** 「4.3 km」「200m」「0.5 mi」。数と単位の間は改行しない空白のこともある。「15 min」「12 MB」は距離ではない */
+    private val DISTANCE = Regex("""\d+(?:[.,]\d+)?[\s\u00A0\u202F]?(?:km|m|mi|yd|ft|キロ|メートル|マイル)(?![A-Za-z])""", RegexOption.IGNORE_CASE)
     private val TIME = Regex("""(?<![\d:])(?:(\d{1,3}):)?(\d{1,2}):(\d{2})(?:[.,](\d{1,2}))?(?![\d:])""")
     private val LAP = Regex("""(?:ラップ|Lap)\s*(\d+)""", RegexOption.IGNORE_CASE)
 

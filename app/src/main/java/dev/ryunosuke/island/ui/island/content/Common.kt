@@ -42,6 +42,8 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -368,6 +370,20 @@ fun BitmapOr(bitmap: ImageBitmap?, size: Dp, tint: Color? = null, shape: android
         contentScale = ContentScale.Crop,
         modifier = Modifier.size(size).let { if (shape != null) it.clip(shape) else it },
     )
+}
+
+/** 不透明な所の平均の明るさが低い（黒い島の上では見えない）絵か。明るい地の通知用に黒で描かれたアイコンを見分ける */
+fun ImageBitmap.isMostlyDark(): Boolean {
+    val pixels = toPixelMap()
+    var sum = 0f
+    var n = 0
+    for (y in 0 until pixels.height step 2) for (x in 0 until pixels.width step 2) {
+        val c = pixels[x, y]
+        if (c.alpha < 0.5f) continue
+        sum += c.luminance()
+        n++
+    }
+    return n > 0 && sum / n < 0.35f
 }
 
 /** 通知の色は黒地で沈むことがあるので明るくする。0（未指定）は白 */

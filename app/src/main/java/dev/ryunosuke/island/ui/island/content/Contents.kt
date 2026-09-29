@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -224,10 +225,14 @@ private fun TimerRing(a: TimerActivity, size: Dp) {
     ProgressRing(left.toFloat() / total, IslandColors.Orange, Modifier.size(size), stroke = 3.dp)
 }
 
+/** 曲がる矢印。明るい地の通知用に暗い色で描かれていれば、黒い島の上でも見えるように白で塗る */
 @Composable
 fun ManeuverIcon(a: NavigationActivity, size: Dp) {
     val px = with(LocalDensity.current) { size.roundToPx() }
-    BitmapOr(rememberIconBitmap(a.maneuver, px), size) {
+    val bitmap = rememberIconBitmap(a.maneuver, px)
+    // 画素を読めない絵（ハードウェアの Bitmap）はそのまま描く
+    val dark = remember(bitmap) { bitmap != null && runCatching { bitmap.isMostlyDark() }.getOrDefault(false) }
+    BitmapOr(bitmap, size, tint = if (dark) Color.White else null) {
         Glyph(IslandIcons.Navigation, IslandColors.Blue, size)
     }
 }
